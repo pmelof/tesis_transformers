@@ -79,13 +79,11 @@ class T2v_tesis(AbstractPipelineClass):
     def decorate_output(self, x):
         return x
 
-
-pipe = T2v_tesis(Model("sin", 65))
-
 # lectura datos
 # loop en futuro para leer varios archivos
 # archivo más pequeño 4,8 
 filepath_dataset = 'indy_20161005_06_baks.h5'
 ds = Dataset_tesis(filepath_dataset, "sua")
+pipe = T2v_tesis(Model("sin", 116, 65))
 pipe.train(ds= ds, num_epochs= 1)
 

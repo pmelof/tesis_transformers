@@ -2,10 +2,10 @@ from .periodic_activations import SineActivation, CosineActivation
 from torch import nn
 
 class Model(nn.Module):
-    def __init__(self, activation, hiddem_dim):
+    def __init__(self, activation, in_features, hiddem_dim):
         super(Model, self).__init__()
         if activation == "sin":
-            self.l1 = SineActivation(116, hiddem_dim)
+            self.l1 = SineActivation(in_features, hiddem_dim)
         elif activation == "cos":
             self.l1 = CosineActivation(1, hiddem_dim)
         
