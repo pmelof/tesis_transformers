@@ -7,7 +7,7 @@ class Model(nn.Module):
         if activation == "sin":
             self.l1 = SineActivation(in_features, hiddem_dim)
         elif activation == "cos":
-            self.l1 = CosineActivation(1, hiddem_dim)
+            self.l1 = CosineActivation(in_features, hiddem_dim)
         
         self.fc1 = nn.Linear(hiddem_dim, 2)
     
