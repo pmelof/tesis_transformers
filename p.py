@@ -113,13 +113,16 @@ class Dataset_for_embeddings(torch.utils.data.Dataset):
 
     def split(self):
         return self.tscv.split(self.X, self.y)
-        
     
     def __getitem__(self, idx):
         return self.X[idx], self.y[idx]
     
     def __len__(self):
         return len(self.X)
+    
+    # def make_ds_embeddings(self, model):
+        
+        
     
 class Pipeline_t2v(AbstractPipelineClass):
     def __init__(self, model):
@@ -154,7 +157,7 @@ class Pipeline_t2v(AbstractPipelineClass):
                 torch.save({
                     'epoch': ep,
                     'model_state_dict': self.model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),+
                     'loss': loss,                    
                 }, best_chp)
                 
@@ -190,12 +193,12 @@ def main(phases):
     ds = Dataset_for_embeddings(filepath_dataset, "sua", n_splits= 5)
 
     model_embeddings = ModelT2v(activation= "sin", in_features= ds.X.shape[1], hiddem_dim= 64+1)
+    batch_size = 32
     # genera input embeddings
     if 'train_t2v' in phases:
         pipe = Pipeline_t2v(model_embeddings)
         true_best_loss = 999999
         true_best_chp = ""
-        batch_size = 32
         umbral_best = 30
         print(f"Umbral: {umbral_best}")            
         for e in range(170, 251, 10):    
@@ -208,9 +211,31 @@ def main(phases):
     else:
         true_best_chp = 'checkpoints/chp_210_181_14.188'
         
-    if '' in phases:
-        pass
+    if 'apply_t2v' in phases:
+        drop_last = True
+        checkpoint = torch.load(true_best_chp)
+        model_embeddings.load_state_dict(checkpoint['model_state_dict'])
+        model_embeddings.eval()
         
+        eval_dl = DataLoader(ds, batch_size, shuffle=False)
+        X_embeddings = []
+        Y_target = []
+        for x, y in eval_dl:
+            x_embedding = model_embeddings(x.float())
+            X_embeddings.append(x_embedding)
+            Y_target.append(y)
+            
+        if drop_last:
+            if X_embeddings[-1].shape[0] != batch_size:
+                X_embeddings.pop()
+                Y_target.pop()
+            
+        with h5py.File(f"ds_embeddings/{filepath_dataset[:-3]}_eb.h5", 'w') as f:
+            f['X_embeddings'] = torch.cat(X_embeddings, axis=1).detach().cpu().numpy()
+            f['Y_target'] = torch.cat(Y_target, axis=1).detach().cpu().numpy()
+        
+            
+         
     
     
     # https://huggingface.co/docs/transformers/model_doc/time_series_transformer
@@ -229,7 +254,8 @@ def main(phases):
 
 
 
-main(['train_t2v'])
+# main(['train_t2v', 'apply_t2v'])
+main(['apply_t2v'])
     
 
 
