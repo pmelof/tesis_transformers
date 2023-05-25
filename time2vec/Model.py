@@ -14,5 +14,6 @@ class ModelT2v(nn.Module):
     def forward(self, x):
         #x = x.unsqueeze(1)
         x = self.l1(x)
-        x = self.fc1(x)
-        return x
+        y = self.fc1(x)
+        # return embeddings and pred
+        return x, y

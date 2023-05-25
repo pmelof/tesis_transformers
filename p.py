@@ -145,7 +145,7 @@ class Pipeline_t2v(AbstractPipelineClass):
 
                 # no se necesita unsqueeze, porque y.shape = 32, 2
                 # y_pred = self.model(x.unsqueeze(1).float())
-                y_pred = self.model(x.float())
+                _, y_pred = self.model(x.float())
                 loss = loss_fn(y_pred, y.float())
 
                 loss.backward()
@@ -157,7 +157,7 @@ class Pipeline_t2v(AbstractPipelineClass):
                 torch.save({
                     'epoch': ep,
                     'model_state_dict': self.model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),+
+                    'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss,                    
                 }, best_chp)
                 
@@ -170,29 +170,16 @@ class Pipeline_t2v(AbstractPipelineClass):
         return x
     
     def decorate_output(self, x):
-        return x
-        
-
-# class Dataset_for_tranformers(torch.utils.data.Dataset):
-#     def __init__(self, filepath_dataset: str, filepath_weight: str):
-        
-        
-   
-#     def __getitem__(self, idx):
-#         return self.X[idx], self.y[idx]
-    
-#     def __len__(self):
-#         return len(self.X)
-    
+        return x  
             
 # main
 def main(phases):
     # lectura datos
-    # 'indy_20161005_06_baks.h5' es archivo más pequeño 4,8 
+    # 'indy_20161005_06_baks.h5' es archivo más pequeño 4,8     
     filepath_dataset = 'indy_20161005_06_baks.h5'
-    ds = Dataset_for_embeddings(filepath_dataset, "sua", n_splits= 5)
+    ds = Dataset_for_embeddings(f"datos/03_baks/{filepath_dataset}", "sua", n_splits= 5)
 
-    model_embeddings = ModelT2v(activation= "sin", in_features= ds.X.shape[1], hiddem_dim= 64+1)
+    model_embeddings = ModelT2v(activation= "sin", in_features= ds.X.shape[1], hiddem_dim= 64)
     batch_size = 32
     # genera input embeddings
     if 'train_t2v' in phases:
@@ -201,7 +188,8 @@ def main(phases):
         true_best_chp = ""
         umbral_best = 30
         print(f"Umbral: {umbral_best}")            
-        for e in range(170, 251, 10):    
+        # for e in range(170, 251, 10):    
+        for e in range(210, 231, 5):    
             best_chp, best_loss = pipe.train(ds= ds, batch_size= batch_size, num_epochs= e, umbral_best= umbral_best)
             if best_loss < true_best_loss:
                 true_best_loss = best_loss
@@ -209,7 +197,7 @@ def main(phases):
                 
         print(f"best of best true_best_loss:{true_best_loss} true_best_chp:'{true_best_chp}'")
     else:
-        true_best_chp = 'checkpoints/chp_210_181_14.188'
+        true_best_chp = 'checkpoints/chp_225_190_12.751'
         
     if 'apply_t2v' in phases:
         drop_last = True
@@ -221,7 +209,7 @@ def main(phases):
         X_embeddings = []
         Y_target = []
         for x, y in eval_dl:
-            x_embedding = model_embeddings(x.float())
+            x_embedding, _ = model_embeddings(x.float())
             X_embeddings.append(x_embedding)
             Y_target.append(y)
             
@@ -229,13 +217,63 @@ def main(phases):
             if X_embeddings[-1].shape[0] != batch_size:
                 X_embeddings.pop()
                 Y_target.pop()
+            else:
+                # rellenar con ceros ?
+                pass
             
-        with h5py.File(f"ds_embeddings/{filepath_dataset[:-3]}_eb.h5", 'w') as f:
-            f['X_embeddings'] = torch.cat(X_embeddings, axis=1).detach().cpu().numpy()
-            f['Y_target'] = torch.cat(Y_target, axis=1).detach().cpu().numpy()
-        
+        with h5py.File(f"ds_embeddings/{filepath_dataset[:-3]}_t2v.h5", 'w') as f:
+            x_cat = torch.cat(X_embeddings)
+            f['X_embeddings'] = x_cat.detach().cpu().numpy()
+            y_cat = torch.cat(Y_target)
+            f['Y_target'] = y_cat.detach().cpu().numpy()
             
-         
+    if 'informer' in phases:
+        # class transformers.InformerConfig ############
+        from transformers import InformerConfig, InformerModel
+
+        # Initializing an Informer configuration 
+        configuration = InformerConfig(prediction_length=12)
+        """
+        prediction_length (int) — The prediction length for the decoder. In other words, the prediction horizon of the model. This value is typically dictated by the dataset and we recommend to set it appropriately.
+        context_length (int, optional, defaults to prediction_length) — The context length for the encoder. If None, the context length will be the same as the prediction_length.
+        distribution_output (string, optional, defaults to "student_t") — The distribution emission head for the model. Could be either “student_t”, “normal” or “negative_binomial”.
+        loss (string, optional, defaults to "nll") — The loss function for the model corresponding to the distribution_output head. For parametric distributions it is the negative log likelihood (nll) - which currently is the only supported one.
+        input_size (int, optional, defaults to 1) — The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of multivariate targets.
+        scaling (string or bool, optional defaults to "mean") — Whether to scale the input targets via “mean” scaler, “std” scaler or no scaler if None. If True, the scaler is set to “mean”.
+        lags_sequence (list[int], optional, defaults to [1, 2, 3, 4, 5, 6, 7]) — The lags of the input time series as covariates often dictated by the frequency of the data. Default is [1, 2, 3, 4, 5, 6, 7] but we recommend to change it based on the dataset appropriately.
+        num_time_features (int, optional, defaults to 0) — The number of time features in the input time series.
+        num_dynamic_real_features (int, optional, defaults to 0) — The number of dynamic real valued features.
+        num_static_categorical_features (int, optional, defaults to 0) — The number of static categorical features.
+        num_static_real_features (int, optional, defaults to 0) — The number of static real valued features.
+        cardinality (list[int], optional) — The cardinality (number of different values) for each of the static categorical features. Should be a list of integers, having the same length as num_static_categorical_features. Cannot be None if num_static_categorical_features is > 0.
+        embedding_dimension (list[int], optional) — The dimension of the embedding for each of the static categorical features. Should be a list of integers, having the same length as num_static_categorical_features. Cannot be None if num_static_categorical_features is > 0.
+        d_model (int, optional, defaults to 64) — Dimensionality of the transformer layers.
+        encoder_layers (int, optional, defaults to 2) — Number of encoder layers.
+        decoder_layers (int, optional, defaults to 2) — Number of decoder layers.
+        encoder_attention_heads (int, optional, defaults to 2) — Number of attention heads for each attention layer in the Transformer encoder.
+        decoder_attention_heads (int, optional, defaults to 2) — Number of attention heads for each attention layer in the Transformer decoder.
+        encoder_ffn_dim (int, optional, defaults to 32) — Dimension of the “intermediate” (often named feed-forward) layer in encoder.
+        decoder_ffn_dim (int, optional, defaults to 32) — Dimension of the “intermediate” (often named feed-forward) layer in decoder.
+        activation_function (str or function, optional, defaults to "gelu") — The non-linear activation function (function or string) in the encoder and decoder. If string, "gelu" and "relu" are supported.
+        dropout (float, optional, defaults to 0.1) — The dropout probability for all fully connected layers in the encoder, and decoder.
+        encoder_layerdrop (float, optional, defaults to 0.1) — The dropout probability for the attention and fully connected layers for each encoder layer.
+        decoder_layerdrop (float, optional, defaults to 0.1) — The dropout probability for the attention and fully connected layers for each decoder layer.
+        attention_dropout (float, optional, defaults to 0.1) — The dropout probability for the attention probabilities.
+        activation_dropout (float, optional, defaults to 0.1) — The dropout probability used between the two layers of the feed-forward networks.
+        num_parallel_samples (int, optional, defaults to 100) — The number of samples to generate in parallel for each time step of inference.
+        init_std (float, optional, defaults to 0.02) — The standard deviation of the truncated normal weight initialization distribution.
+        use_cache (bool, optional, defaults to True) — Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
+        attention_type (str, optional, defaults to “prob”) — Attention used in encoder. This can be set to “prob” (Informer’s ProbAttention) or “full” (vanilla transformer’s canonical self-attention).
+        sampling_factor (int, optional, defaults to 5) — ProbSparse sampling factor (only makes affect when attention_type=“prob”). It is used to control the reduced query matrix (Q_reduce) input length.
+        distil (bool, optional, defaults to True) — Whether to use distilling in encoder.
+        """
+
+        # Randomly initializing a model (with random weights) from the configuration
+        model = InformerModel(configuration)
+
+        # Accessing the model configuration
+        configuration = model.config
+        #########
     
     
     # https://huggingface.co/docs/transformers/model_doc/time_series_transformer

@@ -1,2 +1,5 @@
 .venv
 *.pyc
+checkpoints
+01_ogininales/*
+02_limpieza/*
