@@ -1,5 +1,5 @@
 .venv
 *.pyc
 checkpoints
-01_ogininales/*
-02_limpieza/*
+datos/01_ogininales/*
+datos/02_limpieza/*
