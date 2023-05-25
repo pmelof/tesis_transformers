@@ -1,6 +1,0 @@
-.venv
-*.pyc
-checkpoints
-datos/01_originales/
-datos/02_limpieza/
-__pycache__/
