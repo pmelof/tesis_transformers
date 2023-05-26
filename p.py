@@ -221,7 +221,7 @@ def main(phases):
                 # rellenar con ceros ?
                 pass
             
-        with h5py.File(f"ds_embeddings/{filepath_dataset[:-3]}_t2v.h5", 'w') as f:
+        with h5py.File(f"datos/04_t2v/{filepath_dataset[:-3]}_t2v.h5", 'w') as f:
             x_cat = torch.cat(X_embeddings)
             f['X_embeddings'] = x_cat.detach().cpu().numpy()
             y_cat = torch.cat(Y_target)
