@@ -1,0 +1,80 @@
+ej: indy_20161005_06.h5
+
+cursor_pos : posicion x,y del cursor del mono
+shape 2, Time = 2, 93501
+2 = posX, posY
+
+t = n unidades de tiempo milisegundos = 93501 en ej
+
+finger_pos: posicion x,y,z el dedo del mono, NO SE USA
+
+target_pos : posicion x,y del objetivo
+shape 2, Time = 2, 93501
+2 = posX, posY
+
+spikes: 
+shape: canales x unidades
+unidades 
+u1 = aquellas señales que no se pueden clasificar
+u2..u5 = señales de neuronas
+
+tiene:
+tiempo en que ocurre una señal (iria entre t0 y tn)
+pueden ser todos de diferentes tamaños
+
+son 96 canales siempre
+
+[
+    # 1er canal
+    [   
+        # cada canal tiene hasta 5 unidades, pueden ser menos
+        # de u2 a u5, son SUA
+        "u1": [sp1, sp2, ..., sp(n)],
+        "u2": [sp1,.., sp(m)],
+        "u3": [],
+        "u4": [],
+        "u5": [],
+    ],
+    # 2do canal
+    [
+
+    ],
+]
+donde sp1 es el tiempo en que ocurrio una señal
+
+
+SUA:
+[
+    [u2], [u3], [u4], [u5], # spikes del canal 1
+    [u2], [u3], [u4], [u5], # spikes del canal 2
+    ... 
+]
+
+MUA
+[
+    [u1, u2, u3, u4, u5].sort(), # todos los spikes del canal 1
+    [u1, u2, u3, u4, u5].sort(), # todos los spikes del canal 2
+    ... 
+]
+
+
+ejemplo:
+sp(c,u, i) = el tiempo en que ocurrio una señal
+c=canal
+u: unidad
+i: el i-esimo spike
+
+[
+    u1 : [sp(1,1,1), sp(1,1,2),...,sp(1,1,n1)]
+    u2 : [sp(1,2,1), ..,sp(1,2,n2)]
+    ...
+]
+[
+    u1 : [sp(2,1,1), sp(2,1,2),...,sp(1,1,n1)]
+    u2 : [sp(2,2,1), ..,sp(2,2,n2)]
+    ...
+]
+
+wf: no se sabe que es , falta estudiarlo mas
+
+

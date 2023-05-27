@@ -1,0 +1,34 @@
+27-05-2023 00:58
+estudiar
+- Batch normalización
+- Dropout
+- Por qué se separa en train test y eval:
+Train y eval son para calcular la loss por época, buscar cuál es mejor. Test se usa para la evaluación final.
+
+tips
+- Scheduler al entrenar y evaluar modelos por épocas, sirve para mejorar learning rate, sirve para más?
+
+----
+Cosas para el tutorial:
+El get_batch que usa bptt  en verdad es nuestro dataloader que le ingresa un batch_size, ej 32.
+Para el vocabulario: posibilidad de usar binning para la tasa de disparo, así el vocabulario se reduce.
+Actualmente tengo baks y los valores de la matriz es gigante, ya que tiene flotantes largos, otra solución es transformar esos valores aproximandolos,
+ así igual está la posibilidad de reducir el vocabulario.
+
+Al procesar los SUA para definir el vocabulario, guardar
+vocab, nro ocurrencias
+¿ definir stop words ?, el cero es stopword ?
+
+Lo que entra a Transformers:
+Ntokens= largo del vocabulario
+Emsize= definioel tamaño que quiero como embedding, el embedding lo calcula con una función genérica pytorch
+ en time2vector lo definimos en 64 (valor arbitrario)
+
+----
+en resumen lo que debemos hacer:
+- calcular el vocabulario, usando baks round o binning
+- definir dataset train, eval, test
+    sera necesario separar en 5 splits?, para empezar NO
+etc
+
+
