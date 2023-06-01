@@ -18,6 +18,8 @@ import time
 import sklearn
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.utils.validation import _num_samples
+# transformers
+from transformers import generate_vocabulary
 
 # print(f"Python (v{platform.python_version()})")
 # print(f"Pytorch (v{torch.__version__})")
@@ -121,8 +123,8 @@ class Dataset_for_embeddings(torch.utils.data.Dataset):
         return len(self.X)
     
     # def make_ds_embeddings(self, model):
-        
-        
+    
+
     
 class Pipeline_t2v(AbstractPipelineClass):
     def __init__(self, model):
@@ -171,20 +173,83 @@ class Pipeline_t2v(AbstractPipelineClass):
     
     def decorate_output(self, x):
         return x  
+    
+
+def dataset_preprocessing(filepath_dataset: str , filename_dataset: str , rounded_decimal: int = 1 ):
+    """
+    Lee el archivo dataset baks y redondea los elementos al decimal indicado como parámetro.
+    Este preprocesamiento es para SUA y MUA.
+    Guarda los datos preprocesados en un archivo .h5 con: X_sua, X_mua e y_task.
+    ------------
+    Parámetros: 
+    filepath_dataset: String
+        Dirección donde se enceuntra el dataset baks.
+    filename_dataset: String
+        Nombre del archivo dataset baks.        
+    rounded_decimal: Int
+        Decimal al que se quiere redondear los datos, por defecto 1.
+    -------------
+    """
+    with h5py.File(filepath_dataset, 'r') as f:
+        X_sua = f[f'X_sua'][()]
+        X_mua = f[f'X_mua'][()]
+        y_task = f['y_task'][()]   
+        
+    assert len(X_sua) == len(X_mua) and len(X_sua) == len(y_task),\
+            "Largo de X_sua, X_mua e y_task no coinciden"
+    
+    # Para SUA
+    i=0
+    while i < len(X_sua):
+        j=0
+        while j < len(X_sua[0]):
+            X_sua[i][j] = round(X_sua[i][j], rounded_decimal)
+            j = j + 1
+        i = i + 1
+        
+    # Para MUA
+    i=0
+    while i < len(X_mua):
+        j=0
+        while j < len(X_mua[0]):
+            X_mua[i][j] = round(X_mua[i][j], rounded_decimal)
+            j = j + 1
+        i = i + 1
+        
+    # guardar en un archivo
+    with h5py.File(f"datos/05_rounded/{filename_dataset[:-3]}_rounded_{rounded_decimal}.h5", 'w') as f:      
+        f['X_sua'] = X_sua
+        f['X_mua'] = X_mua
+        f['y_task'] = y_task
+    
             
 # main
 def main(phases):
     # lectura datos
     # 'indy_20161005_06_baks.h5' es archivo más pequeño 4,8     
-    filepath_dataset = 'indy_20161005_06_baks.h5'
-    ds = Dataset_for_embeddings(f"datos/03_baks/{filepath_dataset}", "sua", n_splits= 5)
+    filename_dataset = 'indy_20161005_06_baks.h5'
+    # tokenización
+    ini = time.time()
+    decimal=1
+    dataset_preprocessing(filepath_dataset=f"datos/03_baks/{filename_dataset}", filename_dataset=filename_dataset, rounded_decimal=decimal)
+    fin = time.time()
+    print(f"tokenization time:{fin-ini}")
+    
+    # ds = Dataset_for_embeddings(f"datos/03_baks/{filename_dataset}", "sua", n_splits= 5)
+    ds = Dataset_for_embeddings(f"datos/05_rounded/{filename_dataset[:-3]}_rounded_{decimal}.h5", "sua", n_splits= 5)
+    
+    # Genero vocabulario, ahora por un solo archivo 
+    # después busco el máximo y genero un array que abarque a todos los archivos.
+    print(f"Generando vocabulario ... ")
+    vocabulary, maxi = generate_vocabulary(ds.X, decimal=decimal)
+    print(len(vocabulary), maxi)
 
     model_embeddings = ModelT2v(activation= "sin", in_features= ds.X.shape[1], hiddem_dim= 64)
     batch_size = 32
     # genera input embeddings
     if 'train_t2v' in phases:
         pipe = Pipeline_t2v(model_embeddings)
-        true_best_loss = 999999
+        true_best_loss = float('inf')
         true_best_chp = ""
         umbral_best = 30
         print(f"Umbral: {umbral_best}")            
@@ -221,11 +286,17 @@ def main(phases):
                 # rellenar con ceros ?
                 pass
             
-        with h5py.File(f"datos/04_t2v/{filepath_dataset[:-3]}_t2v.h5", 'w') as f:
+        with h5py.File(f"datos/04_t2v/{filename_dataset[:-3]}_t2v.h5", 'w') as f:
             x_cat = torch.cat(X_embeddings)
             f['X_embeddings'] = x_cat.detach().cpu().numpy()
             y_cat = torch.cat(Y_target)
             f['Y_target'] = y_cat.detach().cpu().numpy()
+    
+    if 'transformers' in phases:
+        
+        print(f"Aplicando transformers al dataset {filename_dataset}")
+
+        
             
     if 'informer' in phases:
         # class transformers.InformerConfig ############
@@ -291,9 +362,10 @@ def main(phases):
     # return
 
 
-
+# main(['train_t2v'])
 # main(['train_t2v', 'apply_t2v'])
-main(['apply_t2v'])
+# main(['apply_t2v'])
+main(['transformers'])
     
 
 

@@ -21,14 +21,16 @@ vocab, nro ocurrencias
 
 Lo que entra a Transformers:
 Ntokens= largo del vocabulario
-Emsize= definioel tamaño que quiero como embedding, el embedding lo calcula con una función genérica pytorch
+Emsize= definir el tamaño que quiero como embedding, el embedding lo calcula con una función genérica pytorch
  en time2vector lo definimos en 64 (valor arbitrario)
 
 ----
-en resumen lo que debemos hacer:
-- calcular el vocabulario, usando baks round o binning
+en resumen lo que debo hacer:
+- calcular el vocabulario, usando baks round o binning (listo)
 - definir dataset train, eval, test
     sera necesario separar en 5 splits?, para empezar NO
-etc
+    esto es debajo de la función generate_vocabulary
+- usar DataLoader para transformers
+- del tutorial falta traspasar desde la linea 264 en adelante.
 
 
