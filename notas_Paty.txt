@@ -32,5 +32,19 @@ en resumen lo que debo hacer:
     esto es debajo de la función generate_vocabulary
 - usar DataLoader para transformers
 - del tutorial falta traspasar desde la linea 264 en adelante.
+(hasta aca listo)
 
+- cambiar el criterio loss a MSE, se cae.
+- cambiar el 116 fijo por un max que abarque a todos los archivos 
+rellenando con 0 o truncando.
+- probar con Adam.
+- probar con otro archivo.
+- guardar pesos de transformers en un directorio NO temporal.
+
+
+- En model de transformers, el input realmente no son los datos, 
+sino que el índice del dato en el vocabulario.
+- Dado que el vocabulario se armo a partir de los datos aproximados a un decimal, y a la vez se genero un 
+archivo con los mismos datos aproximados al decimal, entonces para obtener el índice de estos datos 
+en el dataset simplemente se multiplican todos los datos de X por 10**decimal.
 
