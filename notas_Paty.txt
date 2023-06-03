@@ -41,7 +41,21 @@ rellenando con 0 o truncando.
 - probar con otro archivo.
 - guardar pesos de transformers en un directorio NO temporal.
 
+--------------------
+Para la loss:
+https://neptune.ai/blog/pytorch-loss-functions
+- Ocupare una para regresión, ya que mis datos son continuos.
 
+- Para converger más rápido probar estandarizando los datos con: 
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+- Para separar en train y test se puede ocupar esto: 
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=2)
+
+--------------------
 - En model de transformers, el input realmente no son los datos, 
 sino que el índice del dato en el vocabulario.
 - Dado que el vocabulario se armo a partir de los datos aproximados a un decimal, y a la vez se genero un 
