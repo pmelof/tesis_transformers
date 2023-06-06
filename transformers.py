@@ -3,6 +3,7 @@
 import math
 import numpy as np
 import h5py
+from sklearn.preprocessing import StandardScaler
 import os
 from tempfile import TemporaryDirectory
 from typing import Tuple
@@ -176,19 +177,22 @@ def generate_vocabulary(data, decimal):
         Valor máximo encontrado dentro de data.
     '''
     maxi = 0 # 0 spikes en ese intervalo de tiempo.
+    mini = 99999999999 # valor muy alto.
     ini = time.time()
     for i in data:
         if maxi < max(i):
             maxi = max(i)
+        if mini > min(i):
+            mini = min(i)
     # calcular salto según decimal
     num = 1
     for i in range(decimal):
         num = num/10
     
-    vocabulary = np.arange(0, maxi+1, num)
+    vocabulary = np.arange(mini, maxi+1, num)
     fin = time.time()
     print(f"vocabulary time:{fin-ini}")
-    return vocabulary, maxi
+    return vocabulary, maxi, mini
 
 
 class Dataset_transformers(torch.utils.data.Dataset):
@@ -211,6 +215,7 @@ class Dataset_transformers(torch.utils.data.Dataset):
             Si velocity=True, entonces y solo contiene velocidad x e y del mono, si velocity=False, entonces y tiene posición, velocidad y aceleración x e y del mono.
         """
         self.decimal = decimal
+        # Transformo el valor en el índice del vocabulario
         self.X = np.multiply(X, 10**self.decimal).astype(int)
         self.Y = Y      
 
@@ -224,13 +229,18 @@ class Dataset_transformers(torch.utils.data.Dataset):
     
 
 
-def split_dataset(filepath_dataset: str, feature: str, decimal: int, velocity: bool = True):
+def split_dataset(filepath_dataset: str, feature: str, decimal: int, velocity: bool = True, scaled:bool = True):
     with h5py.File(filepath_dataset, 'r') as f:
         X = f[f'X_{feature}'][()]
         Y = f['y_task'][()]   
     if velocity:
         # select the x-y velocity components
         Y = Y[:,2:4] # data shape: n x 6 (x-y position, x-y velocity, x-y acceleration)
+    if scaled:
+        # Scaling the dataset to have mean=0 and variance=1, gives quick model convergence.
+        scaler = StandardScaler()
+        X = scaler.fit_transform(X)
+        X = X.round(decimals=decimal)
     
     limit_train = int(len(X)*.8)
     limit_eval = int(len(X)*.9)
@@ -268,26 +278,25 @@ print(f"tokenization time:{fin-ini}")
 
 batch_size = 32
 
-train_ds, eval_ds, test_ds, X = split_dataset(f"datos/05_rounded/{filename_dataset[:-3]}_rounded_{decimal}.h5", "sua", decimal, velocity=True)
+train_ds, eval_ds, test_ds, X = split_dataset(f"datos/05_rounded/{filename_dataset[:-3]}_rounded_{decimal}.h5", "sua", decimal, velocity=True, scaled=False)
 train_dl = DataLoader(train_ds, batch_size, shuffle=False)
 eval_dl = DataLoader(eval_ds, batch_size, shuffle=False)
 test_dl = DataLoader(test_ds, batch_size, shuffle=False)
 # Genero vocabulario, ahora por un solo archivo 
 # después busco el máximo y genero un array que abarque a todos los archivos.
 print(f"Generando vocabulario ... ")
-vocabulary, maxi = generate_vocabulary(X, decimal=decimal)
-print(len(vocabulary), maxi)
+vocabulary, maxi, mini = generate_vocabulary(X, decimal=decimal)
+print(len(vocabulary), maxi, mini)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 
 ######################################################################
 # The model hyperparameters are defined below. The ``vocab`` size is
 # equal to the length of the vocabulary.
 #
 ntokens = len(vocabulary)  # size of vocabulary
-emsize = 200  # embedding dimension
-d_hid = 200  # dimension of the feedforward network model in ``nn.TransformerEncoder``
+emsize = 20  # embedding dimension
+d_hid = 20  # dimension of the feedforward network model in ``nn.TransformerEncoder``
 nlayers = 2  # number of ``nn.TransformerEncoderLayer`` in ``nn.TransformerEncoder``
 nhead = 2  # number of heads in ``nn.MultiheadAttention``
 dropout = 0.2  # dropout probability
@@ -311,10 +320,11 @@ model = TransformerModel(ntokens, emsize, nhead, d_hid, nlayers, dropout).to(dev
 
 import time
 
-criterion = nn.CrossEntropyLoss()
-# criterion = nn.MSELoss()
+# criterion = nn.CrossEntropyLoss()
+criterion = nn.MSELoss()
 lr = 5.0  # learning rate
-optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+# optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
 
 def train(model: nn.Module, epoch: int) -> None:
@@ -334,7 +344,7 @@ def train(model: nn.Module, epoch: int) -> None:
             src_mask = src_mask[:seq_len, :seq_len]
         output = model(data, src_mask)
         # loss = criterion(output.view(-1, ntokens), targets)
-        loss = criterion(output, targets)
+        loss = criterion(output, targets.float())
 
         optimizer.zero_grad()
         loss.backward()
@@ -349,7 +359,7 @@ def train(model: nn.Module, epoch: int) -> None:
             #ppl = math.exp(cur_loss)
             print(f'| epoch {epoch:3d} | {batch:5d}/{num_batches:5d} batches | '
                   f'lr {lr:02.2f} | ms/batch {ms_per_batch:5.2f} | '
-                  f'loss {cur_loss:5.2f} ')
+                  f'loss {cur_loss/1000:5.2f} | loss.item {loss.item()/1000:5.2f} ')
             total_loss = 0
             start_time = time.time()
 
@@ -375,7 +385,7 @@ def evaluate(model: nn.Module, eval_data) -> float:
 # we've seen so far. Adjust the learning rate after each epoch.
 
 best_val_loss = float('inf')
-epochs = 3
+epochs = 100
 
 with TemporaryDirectory() as tempdir:
     best_model_params_path = os.path.join(tempdir, "best_model_params.pt")
