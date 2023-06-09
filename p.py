@@ -19,7 +19,7 @@ import sklearn
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.utils.validation import _num_samples
 # transformers
-from transformers import generate_vocabulary
+from transformers.transformers import generate_vocabulary
 
 # print(f"Python (v{platform.python_version()})")
 # print(f"Pytorch (v{torch.__version__})")
@@ -300,7 +300,7 @@ def main(phases):
             
     if 'informer' in phases:
         # class transformers.InformerConfig ############
-        from transformers import InformerConfig, InformerModel
+        from transformers.transformers import InformerConfig, InformerModel
 
         # Initializing an Informer configuration 
         configuration = InformerConfig(prediction_length=12)

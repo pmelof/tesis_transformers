@@ -1,4 +1,4 @@
-from transformers import InformerConfig, InformerModel
+from transformers.transformers import InformerConfig, InformerModel
 import h5py
 import time
 from torch.utils.data import DataLoader
@@ -156,7 +156,7 @@ def train(model: InformerModel, num_epochs: int):
 # InformerForPrediction
 from huggingface_hub import hf_hub_download
 import torch
-from transformers import InformerForPrediction
+from transformers.transformers import InformerForPrediction
 
 file = hf_hub_download(
     repo_id="kashif/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
