@@ -34,7 +34,7 @@ def splitDataset(filepath_dataset: str, feature: str, decimal: int, velocity: bo
     X_train = X[:limit_train]
     Y_train = Y[:limit_train]
 
-    X_train, X_valid, Y_train, Y_valid = train_test_split(X_train, Y_train, test_size=.8, shuffle=False)
+    X_train, X_valid, Y_train, Y_valid = train_test_split(X_train, Y_train, test_size=.1, shuffle=False)
 
     ds_train = DatasetTransformers(X_train, Y_train, decimal=decimal)
     ds_eval = DatasetTransformers(X_valid, Y_valid, decimal=decimal)
@@ -106,7 +106,8 @@ import time
 
 # criterion = nn.CrossEntropyLoss()
 criterion = nn.MSELoss()
-lr = 5.0  # learning rate
+lr = 0.5  # learning rate => basstante bueno, desde epoca 30 lr 0.11 no mejora..
+lr = 0.1  # learning rate
 # optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
@@ -117,44 +118,37 @@ def evaluate(model: nn.Module, eval_data) -> float:
     total_loss = 0.
     src_mask = generate_square_subsequent_mask(batch_size).to(device)
     with torch.no_grad():
-        # for i in range(0, eval_data.size(0) - 1, batch_size):
-        #     data, targets = get_batch(eval_data, i)
-        for i, (data, targets) in enumerate(eval_data):
+        Y_pred = []
+        for data, targets in eval_data:
             seq_len = data.size(0)
             if seq_len != batch_size:
                 src_mask = src_mask[:seq_len, :seq_len]
             output = model(data, src_mask)
-            # output_flat = output.view(-1, ntokens)
-            output_flat = output
-            total_loss += seq_len * criterion(output_flat, targets).item()
-    return total_loss / (len(eval_data) - 1)
+            Y_pred.append(output)
+            total_loss += seq_len * criterion(output, targets).item()
+    return total_loss / len(eval_data), Y_pred
    
 def train(model: nn.Module, epochs: int) -> None:
     best_val_loss = float('inf')
-    model.train()  # turn on train mode
-
     for epoch in range(1, epochs + 1):
+        model.train()  # turn on train mode
         epoch_start_time = time.time()
-                
         total_loss = 0.
         log_interval = 10
         start_time = time.time()
         src_mask = generate_square_subsequent_mask(batch_size).to(device)
 
         num_batches = len(train_ds) // batch_size
-        # for batch, i in enumerate(range(0, train_data.size(0) - 1, batch_size)):
-            # data, targets = get_batch(train_data, i)
         for batch, (data, targets) in enumerate(train_dl):
             seq_len = data.size(0)
             if seq_len != batch_size:  # only on last batch
                 src_mask = src_mask[:seq_len, :seq_len]
             output = model(data, src_mask)
-            # loss = criterion(output.view(-1, ntokens), targets)
             loss = criterion(output, targets.float())
 
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
             optimizer.step()
 
             total_loss += loss.item()
@@ -165,23 +159,29 @@ def train(model: nn.Module, epochs: int) -> None:
                 #ppl = math.exp(cur_loss)
                 print(f'| epoch {epoch:3d} | {batch:5d}/{num_batches:5d} batches | '
                     f'lr {lr:02.2f} | ms/batch {ms_per_batch:5.2f} | '
-                    f'loss {cur_loss/1000:5.2f} | loss.item {loss.item()/1000:5.2f} ')
+                    f'loss {cur_loss/1000:5.2f}')
                 total_loss = 0
                 start_time = time.time()
 
-    val_loss = evaluate(model, eval_dl)
-    # val_ppl = math.exp(val_loss)
-    elapsed = time.time() - epoch_start_time
-    print('-' * 89)
-    print(f'| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | '
-        f'valid loss {val_loss:5.2f}')
-    print('-' * 89)
+        val_loss, Y_pred = evaluate(model, eval_dl)
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            """_summary_
+                tosave = {
+                    "config" : config,
+                    "wt" : model.state_dict()
+                }
+            """
+            torch.save(model.state_dict(), best_model_params_path)
 
-    if val_loss < best_val_loss:
-        best_val_loss = val_loss
-        torch.save(model.state_dict(), best_model_params_path)
-
-    scheduler.step()
+        # val_ppl = math.exp(val_loss)
+        elapsed = time.time() - epoch_start_time
+        print('-' * 89)
+        print(f'| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | '
+            f'valid loss {val_loss/1000:5.2f}')
+        print('-' * 89)
+        
+        scheduler.step()
 
 
 
@@ -190,7 +190,7 @@ def train(model: nn.Module, epochs: int) -> None:
 # we've seen so far. Adjust the learning rate after each epoch.
 
 
-epochs = 10
+epochs = 30
 
 
 train(model, epochs=epochs)
@@ -202,10 +202,10 @@ model.load_state_dict(torch.load(best_model_params_path)) # load best model stat
 # -------------------------------------------
 #
 
-test_loss = evaluate(model, test_dl)
+test_loss, Y_pred_test = evaluate(model, test_dl)
 #test_ppl = math.exp(test_loss)
 print('=' * 89)
-print(f'| End of training | test loss {test_loss:5.2f}')
+print(f'| End of training | test loss {test_loss/1000:5.2f}')
 print('=' * 89)
 
-print("HOla")
+print("FIN")
