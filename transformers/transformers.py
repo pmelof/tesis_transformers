@@ -21,6 +21,9 @@ from process_input import datasetPreprocessing, generateBigVocabulary, DatasetTr
 from model import TransformerModel, generate_square_subsequent_mask
 
 
+
+
+
 def splitDataset(filepath_dataset: str, feature: str, decimal: int, velocity: bool = True, scaled:bool = False):   
     X, Y = readDataset(filepath_dataset= filepath_dataset, feature= feature, velocity= velocity)
     if scaled:
@@ -64,23 +67,13 @@ datasetPreprocessing(filepath_dataset=f"datos/03_baks/{filename_dataset}", filen
 # vocabulario
 vocabulary, maxi, mini = generateBigVocabulary(dir_datasets=dir_datasets, decimal=decimal)
 
-config_model = {
-    "ntoken": len(vocabulary),  # size of vocabulary
-    "d_model" : 20,  # embedding dimension
-    "d_hid" : 20,  # dimension of the feedforward network model in ``nn.TransformerEncoder``
-    "nlayers" : 2,  # number of ``nn.TransformerEncoderLayer`` in ``nn.TransformerEncoder``
-    "nhead" : 2,  # number of heads in ``nn.MultiheadAttention``
-    "dropout" : 0.2,  # dropout probability    
-}                
-model = TransformerModel(**config_model).to(device)
-
 # Esto debería ir en eval y en opt...
 
 # Leer archivo
 # Transformar datos a índices
 # Separar en 5 ventanas el dataset (por el momento no, así que ventana = 1)
 # Separar en train y test (80-20) por cada ventana
-# La parte de train volver a separar en train y eval (80-20)
+# La parte de train volver a separar en train y eval (80-20 o 90-10)
 # Normalizar si es necesario los datos (por el momento probar sin esto, sino explota)
 # En Ahmadi usan algo para dejar los datos secuenciales, posibilidad de aplicarlo también
 # Entrenar el modelo con train y eval
@@ -93,16 +86,67 @@ train_dl = DataLoader(train_ds, batch_size, shuffle=False)
 eval_dl = DataLoader(eval_ds, batch_size, shuffle=False)
 test_dl = DataLoader(test_ds, batch_size, shuffle=False)
 
-######################################################################
-# We use `CrossEntropyLoss <https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html>`__
-# with the `SGD <https://pytorch.org/docs/stable/generated/torch.optim.SGD.html>`__
-# (stochastic gradient descent) optimizer. The learning rate is initially set to
-# 5.0 and follows a `StepLR <https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.StepLR.html>`__
-# schedule. During training, we use `nn.utils.clip_grad_norm\_ <https://pytorch.org/docs/stable/generated/torch.nn.utils.clip_grad_norm_.html>`__
-# to prevent gradients from exploding.
-#
 
-import time
+config_model = {
+    "input_dim" : len(train_ds[0][0]), # dimensión de entrada de la base de datos. ej = 116
+    "output_dim": len(train_ds[0][1]), # dimensión de salida de la base de datos. ej = 2
+    "n_token": len(vocabulary),  # size of vocabulary
+    "d_model" : 20,  # embedding dimension
+    "d_hid" : 20,  # dimension of the feedforward network model in ``nn.TransformerEncoder``
+    "n_layers" : 2,  # number of ``nn.TransformerEncoderLayer`` in ``nn.TransformerEncoder``
+    "n_head" : 2,  # number of heads in ``nn.MultiheadAttention``
+    "dropout" : 0.2,  # dropout probability   
+}                
+model = TransformerModel(**config_model).to(device)
+
+phases = ['opt', 'eval']
+
+if 'opt' in phases:
+    print(f"Optimizando hiperparámetros para el archivo {filename_dataset} redondeado")
+
+    import os
+    #os.environ["CUDA_VISIBLE_DEVICES"]="-1"
+    import argparse
+    import json
+    import h5py
+    import pickle
+    import numpy as np
+    from sklearn.model_selection import train_test_split
+    from sklearn.preprocessing import StandardScaler
+    #from bmi.preprocessing import TimeSeriesSplitCustom, transform_data
+    #from bmi.utils import seed_tensorflow
+    #from bmi.decoders import QRNNDecoder, LSTMDecoder, MLPDecoder
+    #from tensorflow.keras.callbacks import EarlyStopping
+    from sklearn.metrics import mean_squared_error
+    import optuna
+    from optuna.integration import TFKerasPruningCallback
+    from optuna.trial import TrialState
+    #import time as timer
+    
+    # primero lee el archivo - listo en train_ds, eval_ds, test_ds (todavía no se aplica batch_size)
+    # luego define max_timesteps = 5, max_layers = 1, max_units = 600 y la config
+    
+    max_timesteps = 5
+    max_layers = 2
+    max_d_model = 120 # d_model
+    
+    def objective(trial):
+        config_extra = {
+            "timesteps": trial.suggest_int("timesteps", 1, max_timesteps),
+            "n_layers": trial.suggest_int("n_layers", 1, max_layers),
+            "d_model": trial.suggest_int("d_model", 20, max_d_model, step=20),
+            "window_size": 2,
+            "batch_size": trial.suggest_categorical("batch_size", [32, 64, 96]),
+            "epochs": 100,
+            "learning_rate": trial.suggest_float("learning_rate", 1e-4, 0.1, log=True),
+            "dropout": trial.suggest_float("dropout", 0.1, 0.5, step=0.1),
+            "optimizer": trial.suggest_categorical("optimizer", ['Adam', 'RMSProp']),
+            "loss": 'mse',
+            "metric": 'mse'}
+        print(config_extra)
+        print ("hasta aqui opt, en progreso...")
+
+
 
 # criterion = nn.CrossEntropyLoss()
 criterion = nn.MSELoss()
@@ -163,7 +207,7 @@ def train(model: nn.Module, epochs: int) -> None:
                 total_loss = 0
                 start_time = time.time()
 
-        val_loss, Y_pred = evaluate(model, eval_dl)
+        val_loss, Y_pred = evaluate(model, eval_dl)        
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             """_summary_
@@ -190,7 +234,7 @@ def train(model: nn.Module, epochs: int) -> None:
 # we've seen so far. Adjust the learning rate after each epoch.
 
 
-epochs = 30
+epochs = 10
 
 
 train(model, epochs=epochs)
@@ -203,9 +247,54 @@ model.load_state_dict(torch.load(best_model_params_path)) # load best model stat
 #
 
 test_loss, Y_pred_test = evaluate(model, test_dl)
+# Como se tienen las velocidades x e y en tensores de 32, debo convertir cada tensor en array
+Y_pred = np.array([])
+suma = 0
+for t in Y_pred_test:
+    tmp= []
+    tmp = np.append(tmp, t.numpy()).reshape(len(t),2)
+    suma = suma + len(t)
+    Y_pred = np.append(Y_pred, tmp)
+Y_pred = Y_pred.reshape(suma,2)
+
+# Y_real = np.array([])
+# suma = 0
+# for t in test_ds.Y:
+#     tmp= []
+#     tmp = np.append(tmp, t.numpy()).reshape(len(t),2)
+#     suma = suma + len(t)
+#     Y_real = np.append(Y_real, tmp)
+# Y_real = Y_real.reshape(suma,2)
+
+# guardar en un archivo
+with h5py.File(f"datos/07_results/{filename_dataset[:-3]}_rounded_{decimal}.h5", 'w') as f:      
+    f['Y_pred'] = Y_pred
+    f['Y_real'] = test_ds.Y
 #test_ppl = math.exp(test_loss)
 print('=' * 89)
 print(f'| End of training | test loss {test_loss/1000:5.2f}')
 print('=' * 89)
+
+
+# Para graficar resultados
+import matplotlib.pyplot as plt
+plt.subplot(2, 2, 1)
+plt.plot(np.transpose(Y_pred)[0][:100], '--', color = 'tab:red', label = 'Transformers')
+plt.plot(np.transpose(test_ds.Y)[0][:100], color = 'tab:blue', label = 'True')
+plt.ylabel('x-velocidad')
+plt.xlabel('Tiempo [s]')
+plt.title('Velocidad real vs velocidad QRNN', fontdict = {'fontsize':14, 'fontweight':'bold'})
+#plt.legend(bbox_to_anchor=(1.25, -0.1), loc = 'lower right')
+plt.subplot(2, 2, 2)
+plt.plot(np.transpose(Y_pred)[1][:100], '--', color = 'tab:red', label = 'Transformers')
+plt.plot(np.transpose(test_ds.Y)[1][:100], color = 'tab:blue', label = 'True')
+plt.ylabel('y-velocidad')
+plt.xlabel('Tiempo [s]')
+#plt.title('Velocidad real vs velocidad QRNN', fontdict = {'fontsize':14, 'fontweight':'bold'})
+plt.legend(bbox_to_anchor=(1.75, -0.01), loc = 'lower right')
+# set the spacing between subplots
+plt.subplots_adjust(left=0.1, right=0.9, top=0.9, wspace=0.4, hspace=0.4)
+plt.show
+plt.savefig("./datos/07_results/intento1.png")
 
 print("FIN")

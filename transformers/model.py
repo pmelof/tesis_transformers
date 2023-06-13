@@ -22,17 +22,17 @@ from torch.nn import TransformerEncoder, TransformerEncoderLayer
 
 class TransformerModel(nn.Module):
 
-    def __init__(self, ntoken: int, d_model: int, nhead: int, d_hid: int,
-                 nlayers: int, dropout: float = 0.5):
+    def __init__(self, input_dim: int, output_dim: int, n_token: int, d_model: int, n_head: int, d_hid: int,
+                 n_layers: int, dropout: float = 0.5):
         super().__init__()
         self.model_type = 'Transformer'
         self.pos_encoder = PositionalEncoding(d_model, dropout)
-        encoder_layers = TransformerEncoderLayer(d_model, nhead, d_hid, dropout)
-        self.transformer_encoder = TransformerEncoder(encoder_layers, nlayers)
-        self.encoder = nn.Embedding(ntoken, d_model)
+        encoder_layers = TransformerEncoderLayer(d_model, n_head, d_hid, dropout)
+        self.transformer_encoder = TransformerEncoder(encoder_layers, n_layers)
+        self.encoder = nn.Embedding(n_token, d_model)
         self.d_model = d_model
-        # self.decoder = nn.Linear(d_model, ntoken)
-        self.decoder = nn.Linear(d_model*116, 2) # salida de Y: velocidad (v_x, v_y)
+        # self.decoder = nn.Linear(d_model, n_token)
+        self.decoder = nn.Linear(d_model*input_dim, output_dim) # salida de Y: velocidad (v_x, v_y)
 
         self.init_weights()
 
@@ -49,7 +49,7 @@ class TransformerModel(nn.Module):
             src_mask: Tensor, shape ``[seq_len, seq_len]``
 
         Returns:
-            output Tensor of shape ``[seq_len, batch_size, ntoken]``
+            output Tensor of shape ``[seq_len, batch_size, n_token]``
         """
         src = self.encoder(src) * math.sqrt(self.d_model)
         src = self.pos_encoder(src)

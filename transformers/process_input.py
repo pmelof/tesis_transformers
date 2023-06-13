@@ -22,7 +22,6 @@ import numpy as np
 import os
 import h5py
 import torch
-import time
 
 
 def datasetPreprocessing(filepath_dataset: str , filename_dataset: str , rounded_decimal: int = 1 ):
@@ -97,7 +96,6 @@ def generateVocabulary(data, decimal):
     '''
     maxi = 0 # 0 spikes en ese intervalo de tiempo.
     mini = 99999999999 # valor muy alto.
-    ini = time.time()
     for i in data:
         if maxi < max(i):
             maxi = max(i)
@@ -109,8 +107,6 @@ def generateVocabulary(data, decimal):
         num = num/10
     
     vocabulary = np.arange(mini, maxi+1, num)
-    fin = time.time()
-    print(f"vocabulary time:{fin-ini}")
     return vocabulary, maxi, mini
 
 def generateBigVocabulary(dir_datasets: str, decimal: int):
