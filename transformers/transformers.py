@@ -99,54 +99,67 @@ config_model = {
 }                
 model = TransformerModel(**config_model).to(device)
 
-phases = ['opt', 'eval']
+# phases = ['opt', 'eval']
 
-if 'opt' in phases:
-    print(f"Optimizando hiperparámetros para el archivo {filename_dataset} redondeado")
+# if 'opt' in phases:
+#     print(f"Optimizando hiperparámetros para el archivo {filename_dataset} redondeado")
 
-    import os
-    #os.environ["CUDA_VISIBLE_DEVICES"]="-1"
-    import argparse
-    import json
-    import h5py
-    import pickle
-    import numpy as np
-    from sklearn.model_selection import train_test_split
-    from sklearn.preprocessing import StandardScaler
-    #from bmi.preprocessing import TimeSeriesSplitCustom, transform_data
-    #from bmi.utils import seed_tensorflow
-    #from bmi.decoders import QRNNDecoder, LSTMDecoder, MLPDecoder
-    #from tensorflow.keras.callbacks import EarlyStopping
-    from sklearn.metrics import mean_squared_error
-    import optuna
-    from optuna.integration import TFKerasPruningCallback
-    from optuna.trial import TrialState
-    #import time as timer
+#     import os
+#     #os.environ["CUDA_VISIBLE_DEVICES"]="-1"
+#     import json
+#     import h5py
+#     import pickle
+#     import numpy as np
+#     from sklearn.model_selection import train_test_split
+#     from sklearn.preprocessing import StandardScaler
+#     #from bmi.preprocessing import TimeSeriesSplitCustom, transform_data
+#     #from bmi.utils import seed_tensorflow
+#     #from bmi.decoders import QRNNDecoder, LSTMDecoder, MLPDecoder
+#     #from tensorflow.keras.callbacks import EarlyStopping
+#     from sklearn.metrics import mean_squared_error
+#     import optuna
+#     from optuna.integration import TFKerasPruningCallback
+#     from optuna.trial import TrialState
+#     #import time as timer
     
-    # primero lee el archivo - listo en train_ds, eval_ds, test_ds (todavía no se aplica batch_size)
-    # luego define max_timesteps = 5, max_layers = 1, max_units = 600 y la config
+#     # primero lee el archivo - listo en train_ds, eval_ds, test_ds (todavía no se aplica batch_size)
+#     # luego define max_timesteps = 5, max_layers = 1, max_units = 600 y la config
     
-    max_timesteps = 5
-    max_layers = 2
-    max_d_model = 120 # d_model
+#     max_timesteps = 5
+#     max_layers = 2
+#     max_d_model = 120 # d_model
     
-    def objective(trial):
-        config_extra = {
-            "timesteps": trial.suggest_int("timesteps", 1, max_timesteps),
-            "n_layers": trial.suggest_int("n_layers", 1, max_layers),
-            "d_model": trial.suggest_int("d_model", 20, max_d_model, step=20),
-            "window_size": 2,
-            "batch_size": trial.suggest_categorical("batch_size", [32, 64, 96]),
-            "epochs": 100,
-            "learning_rate": trial.suggest_float("learning_rate", 1e-4, 0.1, log=True),
-            "dropout": trial.suggest_float("dropout", 0.1, 0.5, step=0.1),
-            "optimizer": trial.suggest_categorical("optimizer", ['Adam', 'RMSProp']),
-            "loss": 'mse',
-            "metric": 'mse'}
-        print(config_extra)
-        print ("hasta aqui opt, en progreso...")
+#     train_ds, eval_ds, _ = splitDataset(f"datos/05_rounded/{filename_dataset[:-3]}_rounded_{decimal}.h5", "sua", decimal, velocity=True, scaled=False)
+#     train_dl = DataLoader(train_ds, batch_size, shuffle=False)
+#     eval_dl = DataLoader(eval_ds, batch_size, shuffle=False)
+    
+#     def objective(trial):
+#         config = {           
+#             "input_dim" : len(train_ds[0][0]), # dimensión de entrada de la base de datos. ej = 116
+#             "output_dim": len(train_ds[0][1]), # dimensión de salida de la base de datos. ej = 2
+#             "n_token": len(vocabulary),  # size of vocabulary
+#             "d_model": trial.suggest_int("d_model", 20, max_d_model, step=20), # embedding dimension
+#             "d_hid" : 20,  # dimension of the feedforward network model in ``nn.TransformerEncoder``
+#             "n_layers" : trial.suggest_int("n_layers", 1, max_layers),  # number of ``nn.TransformerEncoderLayer`` in ``nn.TransformerEncoder``
+#             "n_head" : 2,  # number of heads in ``nn.MultiheadAttention``
+#             "dropout": trial.suggest_float("dropout", 0.1, 0.5, step=0.1),  # dropout probability
+#             "batch_size": trial.suggest_categorical("batch_size", [32, 64, 96]),
+#             "epochs": 100,
+#             "learning_rate": trial.suggest_float("learning_rate", 1e-4, 0.1, log=True),           
+#             "optimizer": trial.suggest_categorical("optimizer", ['Adam', 'RMSProp']),
+#             # "timesteps": trial.suggest_int("timesteps", 1, max_timesteps),
+#             # "window_size": 2,
+#             }
+#         print(config)  
+        
+#         model = TransformerModel(config['input_dim'], config['output_dim'], config['n_token']/
+#             config['d_model'], config['d_hid'], config['n_layers'], config['n_head'], config['dropout']).to(device)
 
-
+#         print ("hasta aqui opt, en progreso...")
+        
+#         train(model, epochs=epochs, batch_size=config['batch_size'], train_dl=train_dl, optimizer=config['optimizer'], learning_rate=config['learning_rate'])
+#         best_model_params_path = os.path.join("transformers/best_params", "best_model_params.pt")
+#         model.load_state_dict(torch.load(best_model_params_path)) # load best model states
 
 # criterion = nn.CrossEntropyLoss()
 criterion = nn.MSELoss()
@@ -154,13 +167,14 @@ lr = 0.5  # learning rate => basstante bueno, desde epoca 30 lr 0.11 no mejora..
 lr = 0.1  # learning rate
 # optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
+# scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
 best_model_params_path = os.path.join("transformers/best_params", "best_model_params.pt")
     
-def evaluate(model: nn.Module, eval_data) -> float:
+def evaluate(model: nn.Module, eval_data, batch_size: int) -> float:
     model.eval()  # turn on evaluation mode
     total_loss = 0.
     src_mask = generate_square_subsequent_mask(batch_size).to(device)
+    criterion = nn.MSELoss()
     with torch.no_grad():
         Y_pred = []
         for data, targets in eval_data:
@@ -172,8 +186,14 @@ def evaluate(model: nn.Module, eval_data) -> float:
             total_loss += seq_len * criterion(output, targets).item()
     return total_loss / len(eval_data), Y_pred
    
-def train(model: nn.Module, epochs: int) -> None:
+def train(model: nn.Module, epochs: int, batch_size: int, train_dl: DataLoader, optimizer: str, learning_rate: float) -> None:
     best_val_loss = float('inf')
+    criterion = nn.MSELoss()
+    if optimizer.lower() == "rmsprop":
+        optimizer = torch.optim.RMSprop(model.parameters(), lr=learning_rate)
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        
     for epoch in range(1, epochs + 1):
         model.train()  # turn on train mode
         epoch_start_time = time.time()
@@ -197,7 +217,7 @@ def train(model: nn.Module, epochs: int) -> None:
 
             total_loss += loss.item()
             if batch % log_interval == 0 and batch > 0:
-                lr = scheduler.get_last_lr()[0]
+                # lr = scheduler.get_last_lr()[0]
                 ms_per_batch = (time.time() - start_time) * 1000 / log_interval
                 cur_loss = total_loss / log_interval
                 #ppl = math.exp(cur_loss)
@@ -207,7 +227,7 @@ def train(model: nn.Module, epochs: int) -> None:
                 total_loss = 0
                 start_time = time.time()
 
-        val_loss, Y_pred = evaluate(model, eval_dl)        
+        val_loss, Y_pred = evaluate(model, eval_dl, batch_size)        
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             """_summary_
@@ -217,6 +237,7 @@ def train(model: nn.Module, epochs: int) -> None:
                 }
             """
             torch.save(model.state_dict(), best_model_params_path)
+            print(config_model)
 
         # val_ppl = math.exp(val_loss)
         elapsed = time.time() - epoch_start_time
@@ -225,7 +246,7 @@ def train(model: nn.Module, epochs: int) -> None:
             f'valid loss {val_loss/1000:5.2f}')
         print('-' * 89)
         
-        scheduler.step()
+        # scheduler.step()
 
 
 
@@ -237,7 +258,7 @@ def train(model: nn.Module, epochs: int) -> None:
 epochs = 10
 
 
-train(model, epochs=epochs)
+train(model, epochs=epochs, batch_size=batch_size, train_dl=train_dl, optimizer='Adam', learning_rate=lr)
 model.load_state_dict(torch.load(best_model_params_path)) # load best model states
 
 
@@ -246,7 +267,7 @@ model.load_state_dict(torch.load(best_model_params_path)) # load best model stat
 # -------------------------------------------
 #
 
-test_loss, Y_pred_test = evaluate(model, test_dl)
+test_loss, Y_pred_test = evaluate(model, test_dl, batch_size)
 # Como se tienen las velocidades x e y en tensores de 32, debo convertir cada tensor en array
 Y_pred = np.array([])
 suma = 0
@@ -256,15 +277,6 @@ for t in Y_pred_test:
     suma = suma + len(t)
     Y_pred = np.append(Y_pred, tmp)
 Y_pred = Y_pred.reshape(suma,2)
-
-# Y_real = np.array([])
-# suma = 0
-# for t in test_ds.Y:
-#     tmp= []
-#     tmp = np.append(tmp, t.numpy()).reshape(len(t),2)
-#     suma = suma + len(t)
-#     Y_real = np.append(Y_real, tmp)
-# Y_real = Y_real.reshape(suma,2)
 
 # guardar en un archivo
 with h5py.File(f"datos/07_results/{filename_dataset[:-3]}_rounded_{decimal}.h5", 'w') as f:      
