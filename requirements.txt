@@ -6,3 +6,4 @@ transformers
 accelerator
 matplotlib
 optuna
+pytorch-ignite
