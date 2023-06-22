@@ -24,7 +24,7 @@ import h5py
 import torch
 
 
-def datasetPreprocessing(filepath_dataset: str , filename_dataset: str , rounded_decimal: int = 1 ):
+def datasetPreprocessing(filepath_dataset: str , filename_dataset: str , filepath_output: str, rounded_decimal: int = 1 ):
     """
     Lee el archivo dataset baks y redondea los elementos al decimal indicado como parámetro.
     Este preprocesamiento es para SUA y MUA.
@@ -34,7 +34,9 @@ def datasetPreprocessing(filepath_dataset: str , filename_dataset: str , rounded
     filepath_dataset: String
         Dirección donde se enceuntra el dataset baks.
     filename_dataset: String
-        Nombre del archivo dataset baks.        
+        Nombre del archivo dataset baks.  
+    filepath_output: String
+        Dirección donde se guardará el archivo redondeado.
     rounded_decimal: Int
         Decimal al que se quiere redondear los datos, por defecto 1.
     -------------
@@ -66,7 +68,7 @@ def datasetPreprocessing(filepath_dataset: str , filename_dataset: str , rounded
         i = i + 1
         
     # guardar en un archivo
-    with h5py.File(f"datos/05_rounded/{filename_dataset[:-3]}_rounded_{rounded_decimal}.h5", 'w') as f:      
+    with h5py.File(f"{filepath_output}/{filename_dataset[:-3]}_rounded_{rounded_decimal}.h5", 'w') as f:      
         f['X_sua'] = X_sua
         f['X_mua'] = X_mua
         f['y_task'] = y_task
@@ -200,3 +202,60 @@ def readDataset(filepath_dataset: str, feature: str, velocity: bool = True):
         # select the x-y velocity components
         Y = Y[:,2:4] # data shape: n x 6 (x-y position, x-y velocity, x-y acceleration)
     return X, Y
+
+
+# Función de Ahmadi adaptada
+def transform_data(X, y, timesteps):
+    """
+    Transform data into sequence data with timesteps
+
+    Parameters
+    ----------
+    X : ndarray
+        The input data 
+    y : ndarray
+        The output (target) data
+    timesteps: int
+        The umber of input steps to predict next step
+
+    Returns
+    ----------
+    X_seq : ndarray
+        The transformed input sequence data
+    y_seq : ndarray
+        The transformed ouput (target) sequence data
+    """
+    X_seq = []
+    y_seq = []
+    # check length X_in equals to y_in
+    assert len(X) == len(y), "Both input data length must be equal"
+    for i in range(len(X)):
+        end_idx = i + timesteps
+        if end_idx > len(X)-1:
+            break # break if index exceeds the data length
+        # get input and output sequence
+        X_seq.append(np.concatenate(X[i:end_idx,:]).tolist())
+        y_seq.append(y[end_idx-1,:].tolist())
+    return np.array(X_seq), np.array(y_seq)
+
+
+# Juntar varios archivos como uno solo
+def appendFiles(list_filenames: list, filespath_baks: str, padding: bool = True):
+    assert len(list_filenames) <= 1, "Lista de archivos con 1 o menos archivos"
+    X_mua = np.array([])
+    X_sua = np.array([])
+    y_task = np.array([])  
+                
+    for file in list_filenames:
+        filepath = os.path.join(filespath_baks, file)
+        with h5py.File(filepath, 'r') as f:
+            temp_X_mua = f[f'X_mua'][()]
+            temp_X_sua = f[f'X_sua'][()]
+            temp_y_task = f['y_task'][()]  
+        X_mua.np.append(temp_X_mua)
+        X_sua.np.append(temp_X_sua)
+        y_task.np.append(temp_y_task)
+
+
+
+    return

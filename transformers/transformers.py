@@ -179,7 +179,7 @@ if run_example:
     batch_size = 32
 
     # tokenización
-    datasetPreprocessing(filepath_dataset=f"datos/03_baks/{filename_dataset}", filename_dataset=filename_dataset, rounded_decimal=decimal)
+    datasetPreprocessing(filepath_dataset=f"datos/03_baks/{filename_dataset}", filename_dataset=filename_dataset, filepath_output=dir_datasets, rounded_decimal=decimal)
 
     # A priori parece mejor generar solo un vocabulario grande para todos los dataset
     # vocabulario

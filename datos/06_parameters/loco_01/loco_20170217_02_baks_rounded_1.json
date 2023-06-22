@@ -1,0 +1,1 @@
+{"d_model": 80, "n_layers": 1, "dropout": 0.4, "batch_size": 64, "learning_rate": 0.0016519970565639461, "optimizer": "RMSProp", "timesteps": 4, "epochs": 3, "filename": "loco_20170217_02_baks_rounded_1.h5", "rmse_valid_mean": 6.989203776149578, "eval_loss": 3338.3574231556413, "run_time": 3.5173433661460876}

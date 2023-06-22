@@ -1,0 +1,1 @@
+{"d_model": 80, "n_layers": 2, "dropout": 0.4, "batch_size": 32, "learning_rate": 0.019814980022183164, "optimizer": "Adam", "timesteps": 4, "epochs": 5, "filename": "indy_20161005_06_baks_rounded_1.h5", "rmse_valid_mean": 73.72081419993873, "eval_loss": 168010.22863039622, "run_time": 2.0294395089149475}

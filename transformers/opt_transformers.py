@@ -30,7 +30,7 @@ from torch.utils.data import DataLoader
 from transformers import splitDataset, splitDataset2, train, evaluate, reshapeOutput
 from model import TransformerModel
 import torch
-from process_input import generateBigVocabulary, readDataset, transform_data
+from process_input import generateBigVocabulary, readDataset, transform_data, datasetPreprocessing
 
 
 
@@ -84,7 +84,7 @@ def main():
             "n_head" : 2,  # number of heads in ``nn.MultiheadAttention``
             "dropout": trial.suggest_float("dropout", 0.1, 0.5, step=0.1),  # dropout probability
             "batch_size": trial.suggest_categorical("batch_size", [32, 64, 96]),
-            "epochs": 50,
+            "epochs": 5,
             "learning_rate": trial.suggest_float("learning_rate", 1e-4, 0.1, log=True),           
             "optimizer": trial.suggest_categorical("optimizer", ['Adam', 'RMSProp']),
             "timesteps": trial.suggest_int("timesteps", 1, max_timesteps),
@@ -179,58 +179,70 @@ def main():
         print("="*50)
         print("rmse_valid_mean: ", rmse_valid_mean)
         print("eval_loss: ", eval_loss)
+        objective.rmse_valid_mean = rmse_valid_mean
+        objective.eval_loss = eval_loss
         return rmse_valid_mean
 
+    
+
+
     print("="*100)
-    # Variables que defino aquí o ingreso por parámetros, por el momento serán definidas aquí:
-    filename_dataset = 'indy_20161005_06_baks.h5' # más pequeño
-    # filename_dataset = 'indy_20160627_01_baks.h5' # más grande
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     decimal=1   # decimal al que se desea redondear
-    dir_datasets = './datos/05_rounded'
-    vocabulary, _, _ = generateBigVocabulary(dir_datasets=dir_datasets, decimal=decimal)
- 
-    # Lectura dataset
-    print(f"Leyendo dataset desde el archivo: {dir_datasets}/{filename_dataset[:-3]}_rounded_{decimal}.h5")
-    X, Y = readDataset(f"{dir_datasets}/{filename_dataset[:-3]}_rounded_{decimal}.h5", "sua", velocity=True)
-    # train_ds, eval_ds, _ = splitDataset(f"{dir_datasets}/{filename_dataset[:-3]}_rounded_{decimal}.h5", "sua", decimal, velocity=True, scaled=False)
-       
-    print(f"Optimizando hiperparámetros para el archivo {filename_dataset} redondeado")
-    run_start = timer.time()
-        
     
-    # create and optimize study
-    study = optuna.create_study(direction="minimize", pruner=optuna.pruners.MedianPruner(n_startup_trials=10))
-    study.optimize(objective, n_trials=2, timeout=100)
+    # tokenización de archivos loco (redondeo)
+    if len(os.listdir('./datos/05_rounded/loco')) < 10:
+        for filename_dataset in os.listdir('./datos/03_baks/loco'):
+            datasetPreprocessing(filepath_dataset=f"datos/03_baks/loco/{filename_dataset}", filename_dataset=filename_dataset, filepath_output="datos/05_rounded/loco",  rounded_decimal=decimal)
 
-    output_filename = f'{filename_dataset[:-3]}_rounded_{decimal}'
-    output_filepath = 'datos/06_parameters'
-    print(f"Storing study trial into a file: {output_filepath}/{output_filename}.pkl")
-    with open(f'{output_filepath}/{output_filename}.pkl', 'wb') as f:
-        pickle.dump(study, f)
+    dir_datasets = './datos/05_rounded/loco'
+    vocabulary, _, _ = generateBigVocabulary(dir_datasets=dir_datasets, decimal=decimal)
+    # filename_dataset = 'indy_20160627_01_baks.h5' # más grande
 
-    pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
-    complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
+    for filename_dataset in os.listdir(dir_datasets):
+        print(filename_dataset)
+        # if filename_dataset != 'indy_20161005_06_baks_rounded_1.h5':
+        #     continue
+        # Lectura dataset
+        X, Y = readDataset(f"{dir_datasets}/{filename_dataset}", "sua", velocity=True)
+        
+        run_start = timer.time()
+        # create and optimize study
+        study = optuna.create_study(direction="minimize", pruner=optuna.pruners.MedianPruner(n_startup_trials=10))
+        study.optimize(objective, n_trials=2, timeout=100)
 
-    print("Study statistics: ")
-    print("  Number of finished trials: ", len(study.trials))
-    print("  Number of pruned trials: ", len(pruned_trials))
-    print("  Number of complete trials: ", len(complete_trials))
+        output_filepath = 'datos/06_parameters'
+        output_filename = filename_dataset.replace('.h5', '.pkl')
+        print(f"Storing study trial into a file: {output_filepath}/{output_filename}")
+        with open(f'{output_filepath}/{output_filename}', 'wb') as f:
+            pickle.dump(study, f)
 
-    print("Best hyperparameters:")
-    best_params = study.best_trial.params
-    best_params["epochs"] = objective.epochs
-    for key, value in best_params.items():
-        print("    {}: {}".format(key, value))
+        pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
+        complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
 
-    param_filepath = f"{output_filepath}/{output_filename}.json"
-    print(f"Storing best params into a file: {param_filepath}")
-    with open(param_filepath, 'w') as f:
-        json.dump(best_params, f)
+        print("Study statistics: ")
+        print("  Number of finished trials: ", len(study.trials))
+        print("  Number of pruned trials: ", len(pruned_trials))
+        print("  Number of complete trials: ", len(complete_trials))
 
-    run_end = timer.time()
-    run_time = (run_end - run_start) / 60
-    print (f"Whole processes took {run_time:.2f} minutes")
+        print("Best hyperparameters:")
+        best_params = study.best_trial.params
+        best_params["epochs"] = objective.epochs
+        best_params["filename"] = filename_dataset
+        best_params["rmse_valid_mean"] = objective.rmse_valid_mean
+        best_params["eval_loss"] = objective.eval_loss
+        run_end = timer.time()
+        run_time = (run_end - run_start) / 60
+        best_params["run_time"] = run_time
+
+        for key, value in best_params.items():
+            print("    {}: {}".format(key, value))
+
+        param_filepath = f"{output_filepath}/{filename_dataset.replace('.h5', '.json')}"
+        print(f"Storing best params into a file: {param_filepath}")
+        with open(param_filepath, 'w') as f:
+            json.dump(best_params, f)
+
     
     
 # if __name__ == '__main__':
