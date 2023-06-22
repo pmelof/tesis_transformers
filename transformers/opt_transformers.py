@@ -30,7 +30,7 @@ from torch.utils.data import DataLoader
 from transformers import splitDataset, splitDataset2, train, evaluate, reshapeOutput
 from model import TransformerModel
 import torch
-from process_input import generateBigVocabulary, readDataset
+from process_input import generateBigVocabulary, readDataset, transform_data
 
 
 
@@ -69,25 +69,8 @@ class EarlyStopper:
 
 
 def main():
-    print("="*100)
-    # Variables que defino aquí o ingreso por parámetros, por el momento serán definidas aquí:
-    filename_dataset = 'indy_20161005_06_baks.h5' # más pequeño
-    filename_dataset = 'indy_20160627_01_baks.h5' # más grande
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    decimal=1   # decimal al que se desea redondear
-    dir_datasets = './datos/05_rounded'
-    vocabulary, _, _ = generateBigVocabulary(dir_datasets=dir_datasets, decimal=decimal)
- 
-    # Lectura dataset
-    print(f"Leyendo dataset desde el archivo: {dir_datasets}/{filename_dataset[:-3]}_rounded_{decimal}.h5")
-    X, Y = readDataset(f"{dir_datasets}/{filename_dataset[:-3]}_rounded_{decimal}.h5", "sua", velocity=True)
-    # train_ds, eval_ds, _ = splitDataset(f"{dir_datasets}/{filename_dataset[:-3]}_rounded_{decimal}.h5", "sua", decimal, velocity=True, scaled=False)
-       
-    print(f"Optimizando hiperparámetros para el archivo {filename_dataset} redondeado")
-    run_start = timer.time()
-        
     def objective(trial):
-        # max_timesteps = 5
+        max_timesteps = 5
         max_layers = 2
         max_d_model = 120 # d_model
 
@@ -104,7 +87,7 @@ def main():
             "epochs": 50,
             "learning_rate": trial.suggest_float("learning_rate", 1e-4, 0.1, log=True),           
             "optimizer": trial.suggest_categorical("optimizer", ['Adam', 'RMSProp']),
-            # "timesteps": trial.suggest_int("timesteps", 1, max_timesteps),
+            "timesteps": trial.suggest_int("timesteps", 1, max_timesteps),
             # "window_size": 2,
             }
         print(config)  
@@ -116,14 +99,20 @@ def main():
         best_epochs = []
         # Creando las 5 ventanas
         # windows = [.5, .6, .7, .8, .9] # % del tamaño de train (lo que quede se separá 90-10 en train y eval)
-        windows = [.5]
+        windows = [.9]
         for window in windows:           
             train_ds, eval_ds, _ = splitDataset2(X, Y, decimal, limit_sup_train=window, limit_sup_eval=.1 , scaled=False)
 
+            # Secuencializando los datos
+            if config['timesteps'] != 1:
+                train_ds.X, train_ds.Y = transform_data(train_ds.X, train_ds.Y, config['timesteps'])
+                eval_ds.X, eval_ds.Y = transform_data(eval_ds.X, eval_ds.Y, config['timesteps'])
+                config['input_dim'] = config["input_dim"]*config['timesteps']
+            
             train_dl = DataLoader(train_ds, config['batch_size'], shuffle=False)
             eval_dl = DataLoader(eval_ds, config['batch_size'], shuffle=False)
             
-            # Podría normalizar y secuencializar como Ahmadi en un futuro
+            # Podría normalizar no le  veo el sentido aún, ya que mis datos son índices de vocabulario
             
             # Paradas anticipadas
             earlystop = EarlyStopper(patience=8, min_delta=1000)
@@ -187,11 +176,32 @@ def main():
         epochs = int(np.asarray(best_epochs).mean())
         objective.epochs = epochs
         rmse_valid_mean = np.asarray(rmse_valid_folds).mean()
+        print("="*50)
+        print("rmse_valid_mean: ", rmse_valid_mean)
+        print("eval_loss: ", eval_loss)
         return rmse_valid_mean
 
+    print("="*100)
+    # Variables que defino aquí o ingreso por parámetros, por el momento serán definidas aquí:
+    filename_dataset = 'indy_20161005_06_baks.h5' # más pequeño
+    # filename_dataset = 'indy_20160627_01_baks.h5' # más grande
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    decimal=1   # decimal al que se desea redondear
+    dir_datasets = './datos/05_rounded'
+    vocabulary, _, _ = generateBigVocabulary(dir_datasets=dir_datasets, decimal=decimal)
+ 
+    # Lectura dataset
+    print(f"Leyendo dataset desde el archivo: {dir_datasets}/{filename_dataset[:-3]}_rounded_{decimal}.h5")
+    X, Y = readDataset(f"{dir_datasets}/{filename_dataset[:-3]}_rounded_{decimal}.h5", "sua", velocity=True)
+    # train_ds, eval_ds, _ = splitDataset(f"{dir_datasets}/{filename_dataset[:-3]}_rounded_{decimal}.h5", "sua", decimal, velocity=True, scaled=False)
+       
+    print(f"Optimizando hiperparámetros para el archivo {filename_dataset} redondeado")
+    run_start = timer.time()
+        
+    
     # create and optimize study
     study = optuna.create_study(direction="minimize", pruner=optuna.pruners.MedianPruner(n_startup_trials=10))
-    study.optimize(objective, n_trials=200, timeout=32000)
+    study.optimize(objective, n_trials=2, timeout=100)
 
     output_filename = f'{filename_dataset[:-3]}_rounded_{decimal}'
     output_filepath = 'datos/06_parameters'
