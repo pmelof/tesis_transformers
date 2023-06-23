@@ -84,7 +84,7 @@ def main():
             "n_head" : 2,  # number of heads in ``nn.MultiheadAttention``
             "dropout": trial.suggest_float("dropout", 0.1, 0.5, step=0.1),  # dropout probability
             "batch_size": trial.suggest_categorical("batch_size", [32, 64, 96]),
-            "epochs": 5,
+            "epochs": 100,
             "learning_rate": trial.suggest_float("learning_rate", 1e-4, 0.1, log=True),           
             "optimizer": trial.suggest_categorical("optimizer", ['Adam', 'RMSProp']),
             "timesteps": trial.suggest_int("timesteps", 1, max_timesteps),
@@ -92,7 +92,7 @@ def main():
             }
         print(config)  
         
-        # llamar semilla
+        # setear semilla
         torch.manual_seed(0)
         
         rmse_valid_folds = []
@@ -112,7 +112,7 @@ def main():
             train_dl = DataLoader(train_ds, config['batch_size'], shuffle=False)
             eval_dl = DataLoader(eval_ds, config['batch_size'], shuffle=False)
             
-            # Podría normalizar no le  veo el sentido aún, ya que mis datos son índices de vocabulario
+            # Normalizar no le veo el sentido aún, ya que mis datos son índices de vocabulario
             
             # Paradas anticipadas
             earlystop = EarlyStopper(patience=8, min_delta=1000)
@@ -140,15 +140,15 @@ def main():
             best_model_params_path = os.path.join("transformers/best_params", "best_model_params.pt")
             train_start = timer.time()
             history_loss = train(model, 
-                  epochs=config['epochs'], 
-                  batch_size=config['batch_size'], 
-                  train_dl=train_dl, 
-                  optimizer=config['optimizer'], 
-                  learning_rate=config['learning_rate'],
-                  train_ds=train_ds, 
-                  eval_dl=eval_dl, 
-                  best_model_params_path=best_model_params_path,
-                  early_stopper=earlystop),
+                epochs=config['epochs'], 
+                batch_size=config['batch_size'], 
+                train_dl=train_dl, 
+                optimizer=config['optimizer'], 
+                learning_rate=config['learning_rate'],
+                train_ds=train_ds, 
+                eval_dl=eval_dl, 
+                best_model_params_path=best_model_params_path,
+                early_stopper=earlystop),
             train_end = timer.time()
             train_time = (train_end - train_start) / 60
             
@@ -209,7 +209,7 @@ def main():
         run_start = timer.time()
         # create and optimize study
         study = optuna.create_study(direction="minimize", pruner=optuna.pruners.MedianPruner(n_startup_trials=10))
-        study.optimize(objective, n_trials=2, timeout=100)
+        study.optimize(objective, n_trials=200, timeout=32400)
 
         output_filepath = 'datos/06_parameters'
         output_filename = filename_dataset.replace('.h5', '.pkl')
