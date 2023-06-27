@@ -4,30 +4,17 @@ Optimize hyperparameters for deep learning based BMI decoders using Optuna
 
 # import packages
 import os
-#os.environ["CUDA_VISIBLE_DEVICES"]="-1"
-import argparse
+# import argparse
 import json
-import h5py
 import pickle
 import numpy as np
-from sklearn.preprocessing import StandardScaler
-# from bmi.preprocessing import TimeSeriesSplitCustom, transform_data
-# from bmi.utils import seed_tensorflow
-# from bmi.decoders import QRNNDecoder, LSTMDecoder, MLPDecoder
-# from tensorflow.keras.callbacks import EarlyStopping
-from ignite.engine import Engine, Events
-from ignite.handlers import EarlyStopping
 from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import train_test_split
 import optuna
-from optuna.integration import TFKerasPruningCallback
 from optuna.trial import TrialState
 import time as timer
-
-
-    
+   
 from torch.utils.data import DataLoader
-from transformers import splitDataset, splitDataset2, train, evaluate, reshapeOutput
+from transformers import  splitDataset2, train, evaluate, reshapeOutput
 from model import TransformerModel
 import torch
 from process_input import generateBigVocabulary, readDataset, transform_data, datasetPreprocessing
@@ -45,9 +32,7 @@ from process_input import generateBigVocabulary, readDataset, transform_data, da
 # Normalizar si es necesario los datos (por el momento probar sin esto, sino explota)
 # En Ahmadi usan algo para dejar los datos secuenciales, posibilidad de aplicarlo también
 # Entrenar el modelo con train y eval
-# Evaluar el modelo con X_test y obtener Y_test_pred
-# Comparar Y_test_pred con Y_test.
-# Calcular RMSE y CC.
+
 
 class EarlyStopper:
     def __init__(self, patience=1, min_delta=0):
@@ -100,7 +85,9 @@ def main():
         # Creando las 5 ventanas
         # windows = [.5, .6, .7, .8, .9] # % del tamaño de train (lo que quede se separá 90-10 en train y eval)
         windows = [.9]
-        for window in windows:           
+        for window in windows:  
+            # Normalizar no se si sirva, pero de hacerlo debe ser antes de que los datos
+            # sean tokenizados (pasados a índices de vocabulario).        
             train_ds, eval_ds, _ = splitDataset2(X, Y, decimal, limit_sup_train=window, limit_sup_eval=.1 , scaled=False)
 
             # Secuencializando los datos
@@ -112,17 +99,8 @@ def main():
             train_dl = DataLoader(train_ds, config['batch_size'], shuffle=False)
             eval_dl = DataLoader(eval_ds, config['batch_size'], shuffle=False)
             
-            # Normalizar no le veo el sentido aún, ya que mis datos son índices de vocabulario
-            
             # Paradas anticipadas
             earlystop = EarlyStopper(patience=8, min_delta=1000)
-
-            # early stopping callback
-            # earlystop = EarlyStopping(monitor='val_loss', min_delta=0, patience=5, mode='min', restore_best_weights=True)
-            # pruning trial callback
-            # pruning = TFKerasPruningCallback(trial, 'val_loss')
-            # define callbacks
-            # callbacks = [earlystop, pruning]
             
             # Crear modelo
             model = TransformerModel(
@@ -137,7 +115,7 @@ def main():
             ).to(device)
 
             # Entrenar modelo
-            best_model_params_path = os.path.join("transformers/best_params", "best_model_params.pt")
+            best_model_params_path = os.path.join(f"transformers/best_params/best_weights_{monkey_name}", f"{filename_dataset.replace('.h5', '.pt')}")
             train_start = timer.time()
             history_loss = train(model, 
                 epochs=config['epochs'], 
@@ -162,7 +140,6 @@ def main():
             print(f"Training the model took {train_time:.2f} minutes")
             
             # Cargo los mejores pesos del modelo entrenado
-            best_model_params_path = os.path.join("transformers/best_params", "best_model_params.pt")
             model.load_state_dict(torch.load(best_model_params_path)) # load best model states   
             # Evaluo el modelo
             eval_loss, Y_pred = evaluate(model, eval_dl, config['batch_size'])
@@ -179,39 +156,62 @@ def main():
         print("="*50)
         print("rmse_valid_mean: ", rmse_valid_mean)
         print("eval_loss: ", eval_loss)
+        print("="*50)
         objective.rmse_valid_mean = rmse_valid_mean
-        objective.eval_loss = eval_loss
+        objective.eval_loss = eval_loss # guarda el último eval_loss
         return rmse_valid_mean
-
-    
 
 
     print("="*100)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     decimal=1   # decimal al que se desea redondear
-    
-    # tokenización de archivos loco (redondeo)
-    if len(os.listdir('./datos/05_rounded/loco')) < 10:
-        for filename_dataset in os.listdir('./datos/03_baks/loco'):
-            datasetPreprocessing(filepath_dataset=f"datos/03_baks/loco/{filename_dataset}", filename_dataset=filename_dataset, filepath_output="datos/05_rounded/loco",  rounded_decimal=decimal)
-
-    dir_datasets = './datos/05_rounded/loco'
-    vocabulary, _, _ = generateBigVocabulary(dir_datasets=dir_datasets, decimal=decimal)
+    monkey_name = 'indy'
+    feature = 'sua'
     # filename_dataset = 'indy_20160627_01_baks.h5' # más grande
+    
+    # tokenización archivos del mono con el que se trabajará
+    if monkey_name == 'indy':
+        if len(os.listdir('./datos/05_rounded/indy')) < 37:
+            for filename_dataset in os.listdir('./datos/03_baks/indy'):
+                datasetPreprocessing(filepath_dataset=f"datos/03_baks/indy/{filename_dataset}", filename_dataset=filename_dataset, filepath_output="datos/05_rounded/indy",  rounded_decimal=decimal)
+        dir_datasets = './datos/05_rounded/indy'
+    else:
+        if len(os.listdir('./datos/05_rounded/loco')) < 10:
+            for filename_dataset in os.listdir('./datos/03_baks/loco'):
+                datasetPreprocessing(filepath_dataset=f"datos/03_baks/loco/{filename_dataset}", filename_dataset=filename_dataset, filepath_output="datos/05_rounded/loco",  rounded_decimal=decimal)
+        dir_datasets = './datos/05_rounded/loco'
+    
+    vocabulary, _, _ = generateBigVocabulary(dir_datasets=dir_datasets, decimal=decimal)
 
+    # num = 1
     for filename_dataset in os.listdir(dir_datasets):
-        print(filename_dataset)
-        # if filename_dataset != 'indy_20161005_06_baks_rounded_1.h5':
-        #     continue
+        if (filename_dataset == 'indy_20160411_02_baks_rounded_1.h5' or  
+            filename_dataset == 'indy_20160420_01_baks_rounded_1.h5' or 
+            filename_dataset == 'indy_20160622_01_baks_rounded_1.h5' or 
+            filename_dataset == 'indy_20160624_03_baks_rounded_1.h5' or 
+            filename_dataset == 'indy_20160630_01_baks_rounded_1.h5' or 
+            filename_dataset == 'indy_20160927_04_baks_rounded_1.h5' or 
+            filename_dataset == 'indy_20161005_06_baks_rounded_1.h5' or 
+            filename_dataset == 'indy_20161007_02_baks_rounded_1.h5' or 
+            filename_dataset == 'indy_20161024_03_baks_rounded_1.h5' or 
+            filename_dataset == 'indy_20161026_03_baks_rounded_1.h5' or 
+            filename_dataset == 'indy_20161212_02_baks_rounded_1.h5' or 
+            filename_dataset == 'indy_20161220_02_baks_rounded_1.h5' or 
+            filename_dataset == 'indy_20170124_01_baks_rounded_1.h5' or 
+            filename_dataset == 'indy_20160927_06_baks_rounded_1.h5'
+            ):
+            continue
+        print("Archivo a trabajar:", filename_dataset)
         # Lectura dataset
-        X, Y = readDataset(f"{dir_datasets}/{filename_dataset}", "sua", velocity=True)
+        X, Y = readDataset(f"{dir_datasets}/{filename_dataset}", feature, velocity=True)
         
         run_start = timer.time()
         # create and optimize study
         study = optuna.create_study(direction="minimize", pruner=optuna.pruners.MedianPruner(n_startup_trials=10))
-        study.optimize(objective, n_trials=200, timeout=32400)
+        study.optimize(objective, n_trials=200, timeout=10000)
 
-        output_filepath = 'datos/06_parameters'
+        output_filepath = f'datos/06_parameters/{monkey_name}'
+        # output_filepath = f'datos/06_parameters/test'
         output_filename = filename_dataset.replace('.h5', '.pkl')
         print(f"Storing study trial into a file: {output_filepath}/{output_filename}")
         with open(f'{output_filepath}/{output_filename}', 'wb') as f:
@@ -226,24 +226,34 @@ def main():
         print("  Number of complete trials: ", len(complete_trials))
 
         print("Best hyperparameters:")
-        best_params = study.best_trial.params
-        best_params["epochs"] = objective.epochs
-        best_params["filename"] = filename_dataset
-        best_params["rmse_valid_mean"] = objective.rmse_valid_mean
-        best_params["eval_loss"] = objective.eval_loss
+        # best_trial = study.best_trial.params # Return the best trial in the study. --> .params
+        # best_params = study.best_params # Return parameters of the best trial in the study.
+        # best_value = study.best_value # Return the best objective value in the study.
+        best_hyperparams = {}       
+        # best_hyperparams['best_trial'] = best_trial
+        best_hyperparams = study.best_params
+        # best_hyperparams['best_value'] = best_value
+        best_hyperparams["epochs"] = objective.epochs
+        best_hyperparams["filename"] = filename_dataset
+        best_hyperparams["best_rmse"] = study.best_value
+        best_hyperparams["rmse_valid_mean"] = objective.rmse_valid_mean
+        best_hyperparams["eval_loss"] = objective.eval_loss
         run_end = timer.time()
         run_time = (run_end - run_start) / 60
-        best_params["run_time"] = run_time
+        best_hyperparams["run_time"] = run_time
 
-        for key, value in best_params.items():
+        for key, value in best_hyperparams.items():
             print("    {}: {}".format(key, value))
 
         param_filepath = f"{output_filepath}/{filename_dataset.replace('.h5', '.json')}"
         print(f"Storing best params into a file: {param_filepath}")
         with open(param_filepath, 'w') as f:
-            json.dump(best_params, f)
-
-    
+            json.dump(best_hyperparams, f)
+        
+        break
+        # num = num + 1
+        # if num == 14:
+        #     break
     
 # if __name__ == '__main__':
 

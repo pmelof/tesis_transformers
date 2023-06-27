@@ -2,28 +2,20 @@
 Evaluando transformers con pytorch
 """
 
-# Siguiendo los pasos del tutorial
-
 # import packages
 import os
-#os.environ["CUDA_VISIBLE_DEVICES"]="-1"
 import argparse
 import json
 import h5py
 import numpy as np
-from sklearn.preprocessing import StandardScaler
-# from bmi.preprocessing import TimeSeriesSplitCustom, transform_data
-# from bmi.utils import seed_tensorflow, count_params
-# from bmi.decoders import QRNNDecoder, LSTMDecoder, MLPDecoder
 from sklearn.metrics import mean_squared_error
 import time as timer
 
-
 from torch.utils.data import DataLoader
-from transformers import splitDataset, splitDataset2, train, evaluate, reshapeOutput
+from transformers import splitDataset2, train, evaluate, reshapeOutput
 from model import TransformerModel
 import torch
-from process_input import generateBigVocabulary, readDataset, transform_data, datasetPreprocessing
+from process_input import generateBigVocabulary, readDataset, transform_data
 import matplotlib.pyplot as plt
 
 
@@ -62,7 +54,7 @@ def pearson_corrcoef(ytrue, ypred, multioutput="uniform_average"):
     elif multioutput == 'uniform_average':
         return np.average(pearson_score)
 
-# Leer archivo tokenizado (redondeado)
+# Leer archivo tokenizado
 # Generar vocabulario grande, o podría traerlo como parámetro 
 # Definir variables a utilizar: filename_dataset, device, decimal, dir_datasets, vocabulary
 # (podrían ser pasados por argumentos).
@@ -81,6 +73,8 @@ def main(args):
     print("="*100)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     decimal=1   # decimal al que se desea redondear
+    monkey_name = 'indy'
+    feature = 'sua'
     # filename_dataset = 'loco_20170216_02_baks_rounded_1.h5'
     # config_filepath = 'datos/06_parameters/loco_01/loco_20170216_02_baks_rounded_1.json'
     # output_filepath = 'datos/07_results/loco_01/loco_20170216_02_baks_rounded_1.h5'
