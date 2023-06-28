@@ -133,9 +133,9 @@ def train(model: nn.Module, epochs: int, batch_size: int, train_dl: DataLoader, 
         cc_epoch = pearson_corrcoef(eval_ds.Y, Y_pred)        
         
         history.append({
-            "loss_epochs" : val_loss,
-            "rmse_epochs" : rmse_epoch,
-            "cc_epochs" : cc_epoch
+            "loss_epoch" : val_loss,
+            "rmse_epoch" : rmse_epoch,
+            "cc_epoch" : cc_epoch
         })
               
         if val_loss < best_val_loss:

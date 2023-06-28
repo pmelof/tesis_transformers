@@ -140,9 +140,8 @@ def main():
             else:
                 stop_epoch = config['epochs']
             
-            best_epoch = np.argmin([x["loss_epochs"] for x in history]) + 1
-            
-                # history['loss_epochs']) + 1
+            best_epoch = np.argmin([x["loss_epochs"] for x in history]) + 1           
+            # best_epoch = np.argmin(history['loss_epochs']) + 1
             
             best_epochs.append(best_epoch)
             print(f"Training stopped at epoch {stop_epoch} with the best epoch at {best_epoch}")
@@ -202,7 +201,7 @@ def main():
     feature = 'sua'
     # filename_dataset = 'indy_20160627_01_baks.h5' # más grande
     
-    # tokenización archivos del mono con el que se trabajará
+    # lematización en archivos del mono con el que se trabajará (redondeo).
     if monkey_name == 'indy':
         if len(os.listdir('./datos/05_rounded/indy')) < 37:
             for filename_dataset in os.listdir('./datos/03_baks/indy'):
@@ -268,7 +267,7 @@ def main():
         best_hyperparams = study.best_params
         best_hyperparams["epochs"] = objective.epochs
         best_hyperparams["filename"] = filename_dataset
-        best_hyperparams["best_rmse"] = study.best_value
+        best_hyperparams["best_rmse_mean"] = study.best_value
         best_hyperparams["rmse_eval_mean"] = objective.rmse_eval_mean
         best_hyperparams["cc_eval_mean"] = objective.cc_eval_mean
         best_hyperparams["eval_loss_mean"] = objective.eval_loss_mean
