@@ -19,6 +19,7 @@ import time
 
 from process_input import datasetPreprocessing, generateBigVocabulary, DatasetTransformers, readDataset
 from model import TransformerModel, generate_square_subsequent_mask
+from sklearn.metrics import mean_squared_error
 
 # Variables globales
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -82,10 +83,10 @@ def evaluate(model: nn.Module, eval_data, batch_size: int) -> float:
             total_loss += seq_len * criterion(output, targets).item()
     return total_loss / len(eval_data), Y_pred
    
-def train(model: nn.Module, epochs: int, batch_size: int, train_dl: DataLoader, optimizer: str, learning_rate: float, train_ds, eval_dl: DataLoader, best_model_params_path= str, early_stopper=None) -> None:
+def train(model: nn.Module, epochs: int, batch_size: int, train_dl: DataLoader, optimizer: str, learning_rate: float, train_ds, eval_ds, eval_dl: DataLoader, best_model_params_path= str, early_stopper=None):
     best_val_loss = float('inf')
     criterion = nn.MSELoss()
-    history_loss = []
+    history = []
     if optimizer.lower() == "rmsprop":
         optimizer = torch.optim.RMSprop(model.parameters(), lr=learning_rate)
     else:
@@ -124,8 +125,19 @@ def train(model: nn.Module, epochs: int, batch_size: int, train_dl: DataLoader, 
                 total_loss = 0
                 start_time = time.time()
 
-        val_loss, _ = evaluate(model, eval_dl, batch_size) 
-        history_loss.append(val_loss)       
+        val_loss, Y_pred = evaluate(model, eval_dl, batch_size) 
+        
+        # Guardo por cada época: loss, rmse y cc.
+        Y_pred = reshapeOutput(Y_pred)
+        rmse_epoch = mean_squared_error(eval_ds.Y, Y_pred, squared=False)
+        cc_epoch = pearson_corrcoef(eval_ds.Y, Y_pred)        
+        
+        history.append({
+            "loss_epochs" : val_loss,
+            "rmse_epochs" : rmse_epoch,
+            "cc_epochs" : cc_epoch
+        })
+              
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             """_summary_
@@ -148,7 +160,7 @@ def train(model: nn.Module, epochs: int, batch_size: int, train_dl: DataLoader, 
         # print('-' * 89)
         
         # scheduler.step()
-    return history_loss
+    return history
 
 
 def reshapeOutput(Y_pred_eval):
@@ -161,6 +173,42 @@ def reshapeOutput(Y_pred_eval):
         Y_pred = np.append(Y_pred, tmp)
     Y_pred = Y_pred.reshape(suma,2)
     return Y_pred
+
+
+def pearson_corrcoef(ytrue, ypred, multioutput="uniform_average"):
+    """
+    Compute Pearson's coefficient correlation score.
+    
+    Parameters
+    ----------
+    ytrue : ndarray
+        Ground truth (correct) target values.
+    ypred : ndarray
+        Estimated target values.
+    multioutput : str, {'raw_values', 'uniform_average'}
+        Defines aggregating of multiple output values. 
+        'raw_values' : Returns a full set of errors in case of multioutput input.
+        'uniform_average' : Errors of all outputs are averaged with uniform weight.
+
+    Returns
+    -------
+    score : float or ndarray
+        A scalar or array of floating point values.
+    """
+    assert ytrue.shape == ypred.shape, "both data must have same shape"
+    if ytrue.ndim == 1:
+        ytrue = np.expand_dims(ytrue, axis=1)
+        ypred = np.expand_dims(ypred, axis=1)
+
+    pearson_score = []
+    for i in range(ytrue.shape[1]): # Loop through outputs
+        score = np.corrcoef(ytrue[:,i], ypred[:,i], rowvar=False)[0,1] # choose the cross-covariance
+        pearson_score.append(score)
+    pearson_score = np.asarray(pearson_score)
+    if multioutput == 'raw_values':
+        return pearson_score
+    elif multioutput == 'uniform_average':
+        return np.average(pearson_score)
 
 
 ######################################################################
@@ -219,7 +267,7 @@ if run_example:
 
     epochs = 10
 
-    history_loss = train(model, epochs=epochs, batch_size=batch_size, train_dl=train_dl, optimizer='Adam', learning_rate=lr, train_ds=train_ds, eval_dl=eval_dl, best_model_params_path=best_model_params_path)
+    history_loss = train(model, epochs=epochs, batch_size=batch_size, train_dl=train_dl, optimizer='Adam', learning_rate=lr, train_ds=train_ds, eval_ds=eval_ds, eval_dl=eval_dl, best_model_params_path=best_model_params_path)
     model.load_state_dict(torch.load(best_model_params_path)) # load best model states
 
     ######################################################################

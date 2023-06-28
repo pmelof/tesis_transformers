@@ -14,11 +14,10 @@ from optuna.trial import TrialState
 import time as timer
    
 from torch.utils.data import DataLoader
-from transformers import  splitDataset2, train, evaluate, reshapeOutput
+from transformers import  splitDataset2, train, evaluate, reshapeOutput, pearson_corrcoef
 from model import TransformerModel
 import torch
 from process_input import generateBigVocabulary, readDataset, transform_data, datasetPreprocessing
-
 
 
 # Leer archivo tokenizado 
@@ -69,7 +68,7 @@ def main():
             "n_head" : 2,  # number of heads in ``nn.MultiheadAttention``
             "dropout": trial.suggest_float("dropout", 0.1, 0.5, step=0.1),  # dropout probability
             "batch_size": trial.suggest_categorical("batch_size", [32, 64, 96]),
-            "epochs": 100,
+            "epochs": 3,
             "learning_rate": trial.suggest_float("learning_rate", 1e-4, 0.1, log=True),           
             "optimizer": trial.suggest_categorical("optimizer", ['Adam', 'RMSProp']),
             "timesteps": trial.suggest_int("timesteps", 1, max_timesteps),
@@ -80,12 +79,17 @@ def main():
         # setear semilla
         torch.manual_seed(0)
         
-        rmse_valid_folds = []
+        rmse_eval_folds = []
+        cc_eval_folds = []
+        eval_loss_folds = []
         best_epochs = []
         # Creando las 5 ventanas
         # windows = [.5, .6, .7, .8, .9] # % del tamaño de train (lo que quede se separá 90-10 en train y eval)
-        windows = [.9]
+        windows = [.8, .9]
         for window in windows:  
+            print("WINDOWS:", window)
+            config["input_dim"] = len(X[0]) # dimensión de entrada de la base de datos. ej = 116
+            # config["output_dim"]: len(Y[0]) # dimensión de salida de la base de datos. ej = 2]
             # Normalizar no se si sirva, pero de hacerlo debe ser antes de que los datos
             # sean tokenizados (pasados a índices de vocabulario).        
             train_ds, eval_ds, _ = splitDataset2(X, Y, decimal, limit_sup_train=window, limit_sup_eval=.1 , scaled=False)
@@ -115,18 +119,19 @@ def main():
             ).to(device)
 
             # Entrenar modelo
-            best_model_params_path = os.path.join(f"transformers/best_params/best_weights_{monkey_name}", f"{filename_dataset.replace('.h5', '.pt')}")
+            best_model_params_path = os.path.join(f"transformers/best_params/best_weights_{monkey_name}/opt", f"{filename_dataset.replace('.h5', '.pt')}")
             train_start = timer.time()
-            history_loss = train(model, 
+            history = train(model, 
                 epochs=config['epochs'], 
                 batch_size=config['batch_size'], 
                 train_dl=train_dl, 
                 optimizer=config['optimizer'], 
                 learning_rate=config['learning_rate'],
                 train_ds=train_ds, 
+                eval_ds=eval_ds, 
                 eval_dl=eval_dl, 
                 best_model_params_path=best_model_params_path,
-                early_stopper=earlystop),
+                early_stopper=earlystop)
             train_end = timer.time()
             train_time = (train_end - train_start) / 60
             
@@ -134,7 +139,11 @@ def main():
                 stop_epoch = earlystop.stopped_epoch
             else:
                 stop_epoch = config['epochs']
-            best_epoch = np.argmin(history_loss) + 1
+            
+            best_epoch = np.argmin([x["loss_epochs"] for x in history]) + 1
+            
+                # history['loss_epochs']) + 1
+            
             best_epochs.append(best_epoch)
             print(f"Training stopped at epoch {stop_epoch} with the best epoch at {best_epoch}")
             print(f"Training the model took {train_time:.2f} minutes")
@@ -147,19 +156,43 @@ def main():
             # Evaluando rendimiento
             print("Evaluando rendimiento del modelo")
             Y_pred_eval = reshapeOutput(Y_pred)
-            rmse_valid = mean_squared_error(eval_ds.Y, Y_pred_eval, squared=False)
-            rmse_valid_folds.append(rmse_valid)
+            rmse_eval = mean_squared_error(eval_ds.Y, Y_pred_eval, squared=False)
+            cc_eval = pearson_corrcoef(eval_ds.Y, Y_pred_eval) 
+            rmse_eval_folds.append(rmse_eval)
+            cc_eval_folds.append(cc_eval)
+            eval_loss_folds.append(eval_loss)
         
         epochs = int(np.asarray(best_epochs).mean())
         objective.epochs = epochs
-        rmse_valid_mean = np.asarray(rmse_valid_folds).mean()
+        rmse_eval_mean = np.asarray(rmse_eval_folds).mean()
+        cc_eval_mean = np.asarray(cc_eval_folds).mean()
+        eval_loss_mean = np.asarray(eval_loss_folds).mean()
         print("="*50)
-        print("rmse_valid_mean: ", rmse_valid_mean)
-        print("eval_loss: ", eval_loss)
+        print("RMSE folds:", np.asarray(rmse_eval_folds))
+        print("rmse_eval_mean: ", rmse_eval_mean)
+        print("CC folds:", np.asarray(cc_eval_folds))
+        print("cc_eval_mean: ", cc_eval_mean)
+        print("EVAL loss folds:", np.asarray(eval_loss_folds))
+        print("eval_loss_mean: ", eval_loss_mean)
         print("="*50)
-        objective.rmse_valid_mean = rmse_valid_mean
-        objective.eval_loss = eval_loss # guarda el último eval_loss
-        return rmse_valid_mean
+        
+        # Quiero que por cada trial vea cual es mejor en rmse_mean, 
+        # para el primer trial simplemente que lo guarde en objective.rmse_eval_mean, 
+        # si encuentra uno mejor que lo actualice...
+        try:
+            objective_rmse_eval_mean = objective.rmse_eval_mean
+        except:
+            objective_rmse_eval_mean = rmse_eval_mean+1
+            
+        if (objective_rmse_eval_mean > rmse_eval_mean):
+            objective.rmse_folds = np.asarray(rmse_eval_folds)
+            objective.cc_folds = np.asarray(cc_eval_folds)
+            objective.eval_loss_folds = np.asarray(eval_loss_folds)
+            objective.rmse_eval_mean = rmse_eval_mean
+            objective.cc_eval_mean = cc_eval_mean
+            objective.eval_loss_mean = eval_loss_mean
+            objective.history = history
+        return rmse_eval_mean
 
 
     print("="*100)
@@ -173,7 +206,8 @@ def main():
     if monkey_name == 'indy':
         if len(os.listdir('./datos/05_rounded/indy')) < 37:
             for filename_dataset in os.listdir('./datos/03_baks/indy'):
-                datasetPreprocessing(filepath_dataset=f"datos/03_baks/indy/{filename_dataset}", filename_dataset=filename_dataset, filepath_output="datos/05_rounded/indy",  rounded_decimal=decimal)
+                datasetPreprocessing(filepath_dataset=f"datos/03_baks/indy/{filename_dataset}", filename_dataset=filename_dataset, filepath_output="datos/05_rounded/indy",  rounded_decimal=decimal, normalization=False)
+                break
         dir_datasets = './datos/05_rounded/indy'
     else:
         if len(os.listdir('./datos/05_rounded/loco')) < 10:
@@ -205,10 +239,11 @@ def main():
         # Lectura dataset
         X, Y = readDataset(f"{dir_datasets}/{filename_dataset}", feature, velocity=True)
         
+        
         run_start = timer.time()
         # create and optimize study
-        study = optuna.create_study(direction="minimize", pruner=optuna.pruners.MedianPruner(n_startup_trials=10))
-        study.optimize(objective, n_trials=200, timeout=10000)
+        study = optuna.create_study(direction="minimize", pruner=optuna.pruners.MedianPruner(n_startup_trials=1))
+        study.optimize(objective, n_trials=20, timeout=100)
 
         output_filepath = f'datos/06_parameters/{monkey_name}'
         # output_filepath = f'datos/06_parameters/test'
@@ -230,17 +265,21 @@ def main():
         # best_params = study.best_params # Return parameters of the best trial in the study.
         # best_value = study.best_value # Return the best objective value in the study.
         best_hyperparams = {}       
-        # best_hyperparams['best_trial'] = best_trial
         best_hyperparams = study.best_params
-        # best_hyperparams['best_value'] = best_value
         best_hyperparams["epochs"] = objective.epochs
         best_hyperparams["filename"] = filename_dataset
         best_hyperparams["best_rmse"] = study.best_value
-        best_hyperparams["rmse_valid_mean"] = objective.rmse_valid_mean
-        best_hyperparams["eval_loss"] = objective.eval_loss
+        best_hyperparams["rmse_eval_mean"] = objective.rmse_eval_mean
+        best_hyperparams["cc_eval_mean"] = objective.cc_eval_mean
+        best_hyperparams["eval_loss_mean"] = objective.eval_loss_mean
+        best_hyperparams["rmse_folds"] = objective.rmse_folds
+        best_hyperparams["cc_folds"] = objective.cc_folds
+        best_hyperparams["eval_loss_folds"] = objective.eval_loss_folds
         run_end = timer.time()
         run_time = (run_end - run_start) / 60
         best_hyperparams["run_time"] = run_time
+        best_hyperparams["time_best_trial"] = study.best_trial.duration
+        best_hyperparams["history_train"] = objective.history
 
         for key, value in best_hyperparams.items():
             print("    {}: {}".format(key, value))
@@ -248,7 +287,7 @@ def main():
         param_filepath = f"{output_filepath}/{filename_dataset.replace('.h5', '.json')}"
         print(f"Storing best params into a file: {param_filepath}")
         with open(param_filepath, 'w') as f:
-            json.dump(best_hyperparams, f)
+            json.dump(best_hyperparams, f, default=str, indent=2)
         
         break
         # num = num + 1
