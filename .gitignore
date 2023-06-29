@@ -4,3 +4,9 @@ checkpoints
 01_originales
 02_limpieza
 __pycache__
+*.pkl
+*.pt
+*.png
+*.txt
+*.h5
+*.json
