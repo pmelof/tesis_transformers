@@ -23,8 +23,7 @@ import os
 import h5py
 import torch
 
-
-def datasetPreprocessing(filepath_dataset: str , filename_dataset: str , filepath_output: str, rounded_decimal: int = 1 ):
+def datasetPreprocessing(filepath_dataset: str , filename_dataset: str , filepath_output: str, rounded_decimal: int = 1):
     """
     Lee el archivo dataset baks y redondea los elementos al decimal indicado como parámetro.
     Este preprocesamiento es para SUA y MUA.
@@ -153,12 +152,12 @@ def generateBigVocabulary(dir_datasets: str, decimal: int):
     num = 1
     for i in range(decimal):
         num = num/10  
-    vocabulary = np.arange(min_global, max_global+1, num)
+    vocabulary = np.arange(min_global, max_global+1, num).round(decimal)
     return vocabulary, max_global, min_global
 
 
 class DatasetTransformers(torch.utils.data.Dataset):
-    def __init__(self, X, Y, decimal):       
+    def __init__(self, X, Y, decimal, vocabulary=None):       
         '''
         Recibe los datos X (SUA o MUA) e Y de un dataset leído, luego los datos de X los transforma 
         en un valor que representa al índice donde iría ubicado dicho valor en el vocabulario.
@@ -180,9 +179,25 @@ class DatasetTransformers(torch.utils.data.Dataset):
             depende de los datos ingresados en Y.
         '''
         self.decimal = decimal
+        self.Y = Y 
+           
         # Transformo el valor en el índice del vocabulario
-        self.X = np.multiply(X, 10**self.decimal).astype(int)
-        self.Y = Y      
+        if vocabulary is not None: # vocabulario nuevo por archivo
+            i=0
+            res=[]
+            while i < X.shape[0]:
+                j=0
+                l = []    
+                while j < X.shape[1]:
+                    aux = int(np.where(vocabulary==X[i][j])[0])
+                    l.append(aux)
+                    j=j+1
+                res.append(l)
+                i=i+1
+            self.X = np.array(res)
+        else:   # vocabulario original           
+            self.X = np.multiply(X, 10**self.decimal).astype(int)
+            
 
         assert len(self.X) == len(self.Y),\
             "Largo de X e Y no coinciden"

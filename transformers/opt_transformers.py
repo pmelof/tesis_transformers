@@ -92,7 +92,11 @@ def main():
             # config["output_dim"]: len(Y[0]) # dimensión de salida de la base de datos. ej = 2]
             # Normalizar no se si sirva, pero de hacerlo debe ser antes de que los datos
             # sean tokenizados (pasados a índices de vocabulario).        
-            train_ds, eval_ds, _ = splitDataset2(X, Y, decimal, limit_sup_train=window, limit_sup_eval=.1 , scaled=False)
+            if scaled:
+                train_ds, eval_ds, _, new_vocabulary = splitDataset2(X, Y, decimal, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
+                config['n_token'] = len(new_vocabulary)
+            else:
+                train_ds, eval_ds, _ = splitDataset2(X, Y, decimal, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
 
             # Secuencializando los datos
             if config['timesteps'] != 1:
@@ -140,7 +144,7 @@ def main():
             else:
                 stop_epoch = config['epochs']
             
-            best_epoch = np.argmin([x["loss_epochs"] for x in history]) + 1           
+            best_epoch = np.argmin([x["loss_epoch"] for x in history]) + 1           
             # best_epoch = np.argmin(history['loss_epochs']) + 1
             
             best_epochs.append(best_epoch)
@@ -199,13 +203,14 @@ def main():
     decimal=1   # decimal al que se desea redondear
     monkey_name = 'indy'
     feature = 'sua'
+    scaled = False
     # filename_dataset = 'indy_20160627_01_baks.h5' # más grande
     
     # lematización en archivos del mono con el que se trabajará (redondeo).
     if monkey_name == 'indy':
         if len(os.listdir('./datos/05_rounded/indy')) < 37:
             for filename_dataset in os.listdir('./datos/03_baks/indy'):
-                datasetPreprocessing(filepath_dataset=f"datos/03_baks/indy/{filename_dataset}", filename_dataset=filename_dataset, filepath_output="datos/05_rounded/indy",  rounded_decimal=decimal, normalization=False)
+                datasetPreprocessing(filepath_dataset=f"datos/03_baks/indy/{filename_dataset}", filename_dataset=filename_dataset, filepath_output="datos/05_rounded/indy",  rounded_decimal=decimal)
                 break
         dir_datasets = './datos/05_rounded/indy'
     else:
@@ -215,6 +220,7 @@ def main():
         dir_datasets = './datos/05_rounded/loco'
     
     vocabulary, _, _ = generateBigVocabulary(dir_datasets=dir_datasets, decimal=decimal)
+    # Otra opción cuando se normaliza: crear vocabulario con números negativos y positivos, rango amplio para que funcione para todos los archivos.
 
     # num = 1
     for filename_dataset in os.listdir(dir_datasets):
