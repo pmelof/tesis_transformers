@@ -103,11 +103,11 @@ def generateVocabulary(data, decimal):
         if mini > min(i):
             mini = min(i)
     # calcular salto según decimal
-    num = 1
-    for i in range(decimal):
-        num = num/10
+    # num = 1
+    # for i in range(decimal):
+    #     num = num/10
     
-    vocabulary = np.arange(mini, maxi+1, num)
+    vocabulary = np.arange(mini, maxi+1, 10**(-decimal))
     return vocabulary, maxi, mini
 
 def generateBigVocabulary(dir_datasets: str, decimal: int):
@@ -133,7 +133,7 @@ def generateBigVocabulary(dir_datasets: str, decimal: int):
         Valor mínimo encontrado dentro de los datasets.
     '''
     datasets = os.listdir(dir_datasets)
-    print(datasets)
+    # print(datasets)
     max_global = 0
     min_global = 99999999999
 
@@ -149,10 +149,10 @@ def generateBigVocabulary(dir_datasets: str, decimal: int):
         if (min_sua < min_global or min_mua > min_global):
             min_global = min(min_sua, min_mua)
             
-    num = 1
-    for i in range(decimal):
-        num = num/10  
-    vocabulary = np.arange(min_global, max_global+1, num).round(decimal)
+    # num = 1
+    # for i in range(decimal):
+    #     num = num/10  
+    vocabulary = np.arange(min_global, max_global+1, 10**(-decimal)).round(decimal)
     return vocabulary, max_global, min_global
 
 
@@ -209,11 +209,11 @@ class DatasetTransformers(torch.utils.data.Dataset):
         return len(self.X)
 
 
-def readDataset(filepath_dataset: str, feature: str, velocity: bool = True):
+def readDataset(filepath_dataset: str, feature: str, only_velocity: bool = True):
     with h5py.File(filepath_dataset, 'r') as f:
         X = f[f'X_{feature}'][()]
         Y = f['y_task'][()]   
-    if velocity:
+    if only_velocity:
         # select the x-y velocity components
         Y = Y[:,2:4] # data shape: n x 6 (x-y position, x-y velocity, x-y acceleration)
     return X, Y

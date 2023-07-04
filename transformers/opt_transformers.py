@@ -4,7 +4,7 @@ Optimize hyperparameters for deep learning based BMI decoders using Optuna
 
 # import packages
 import os
-# import argparse
+import argparse
 import json
 import pickle
 import numpy as np
@@ -14,23 +14,10 @@ from optuna.trial import TrialState
 import time as timer
    
 from torch.utils.data import DataLoader
-from transformers import  splitDataset2, train, evaluate, reshapeOutput, pearson_corrcoef
+from transformers_p import  splitDataset2, train, evaluate, reshapeOutput, pearson_corrcoef
 from model import TransformerModel
 import torch
 from process_input import generateBigVocabulary, readDataset, transform_data, datasetPreprocessing
-
-
-# Leer archivo tokenizado 
-# Generar vocabulario (?), o podría traerlo como parámetro 
-# Definir variables a utilizar: filename_dataset, device, decimal, dir_datasets, vocabulary
-# (podrían ser pasados por argumentos).
-# Variables que se necesitan definir aquí: max_timesteps (?), max_layers, max_d_model, train_ds, eval_ds
-# Separar en 5 ventanas el dataset (por el momento no, así que ventana = 1)
-# Separar en train y test (80-20) por cada ventana, aquí solo ocupo train
-# y lo vuelvo a separar en train y eval (90-10) con splitDataset.
-# Normalizar si es necesario los datos (por el momento probar sin esto, sino explota)
-# En Ahmadi usan algo para dejar los datos secuenciales, posibilidad de aplicarlo también
-# Entrenar el modelo con train y eval
 
 
 class EarlyStopper:
@@ -52,7 +39,7 @@ class EarlyStopper:
         return False
 
 
-def main():
+def main(args):
     def objective(trial):
         max_timesteps = 5
         max_layers = 2
@@ -68,7 +55,7 @@ def main():
             "n_head" : 2,  # number of heads in ``nn.MultiheadAttention``
             "dropout": trial.suggest_float("dropout", 0.1, 0.5, step=0.1),  # dropout probability
             "batch_size": trial.suggest_categorical("batch_size", [32, 64, 96]),
-            "epochs": 3,
+            "epochs": 100,
             "learning_rate": trial.suggest_float("learning_rate", 1e-4, 0.1, log=True),           
             "optimizer": trial.suggest_categorical("optimizer", ['Adam', 'RMSProp']),
             "timesteps": trial.suggest_int("timesteps", 1, max_timesteps),
@@ -84,20 +71,17 @@ def main():
         eval_loss_folds = []
         best_epochs = []
         # Creando las 5 ventanas
-        # windows = [.5, .6, .7, .8, .9] # % del tamaño de train (lo que quede se separá 90-10 en train y eval)
-        windows = [.8, .9]
+        windows = [.5, .6, .7, .8, .9] # % del tamaño de train (lo que quede se separá 90-10 en train y eval)
+        # windows = [.8, .9]
         for window in windows:  
-            print("WINDOWS:", window)
+            print("FOLDS:", window)
             config["input_dim"] = len(X[0]) # dimensión de entrada de la base de datos. ej = 116
-            # config["output_dim"]: len(Y[0]) # dimensión de salida de la base de datos. ej = 2]
-            # Normalizar no se si sirva, pero de hacerlo debe ser antes de que los datos
-            # sean tokenizados (pasados a índices de vocabulario).        
+        
             if scaled:
-                train_ds, eval_ds, _, new_vocabulary = splitDataset2(X, Y, decimal, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
-                config['n_token'] = len(new_vocabulary)
+                train_ds, eval_ds, _ = splitDataset2(X, Y, decimal, vocabulary=vocabulary, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
             else:
                 train_ds, eval_ds, _ = splitDataset2(X, Y, decimal, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
-
+            
             # Secuencializando los datos
             if config['timesteps'] != 1:
                 train_ds.X, train_ds.Y = transform_data(train_ds.X, train_ds.Y, config['timesteps'])
@@ -123,7 +107,9 @@ def main():
             ).to(device)
 
             # Entrenar modelo
-            best_model_params_path = os.path.join(f"transformers/best_params/best_weights_{monkey_name}/opt", f"{filename_dataset.replace('.h5', '.pt')}")
+            print("Entrenando modelo")
+            best_weights_path = os.path.join(f'{dir_output}/best_weights/{monkey_name}/{feature}', f"{filename_dataset.replace('.h5', '.pt')}")
+            # best_model_params_path = os.path.join(f"transformers/best_params/best_weights_{monkey_name}/opt", f"{filename_dataset.replace('.h5', '.pt')}")
             train_start = timer.time()
             history = train(model, 
                 epochs=config['epochs'], 
@@ -134,7 +120,7 @@ def main():
                 train_ds=train_ds, 
                 eval_ds=eval_ds, 
                 eval_dl=eval_dl, 
-                best_model_params_path=best_model_params_path,
+                best_model_params_path=best_weights_path,
                 early_stopper=earlystop)
             train_end = timer.time()
             train_time = (train_end - train_start) / 60
@@ -148,11 +134,11 @@ def main():
             # best_epoch = np.argmin(history['loss_epochs']) + 1
             
             best_epochs.append(best_epoch)
-            print(f"Training stopped at epoch {stop_epoch} with the best epoch at {best_epoch}")
-            print(f"Training the model took {train_time:.2f} minutes")
+            print(f"El entrenamiento paro en la época {stop_epoch} siendo la mejor época {best_epoch}")
+            print(f"El entrenamiento duró {train_time:.2f} minutos")
             
             # Cargo los mejores pesos del modelo entrenado
-            model.load_state_dict(torch.load(best_model_params_path)) # load best model states   
+            model.load_state_dict(torch.load(best_weights_path)) # load best model states   
             # Evaluo el modelo
             eval_loss, Y_pred = evaluate(model, eval_dl, config['batch_size'])
 
@@ -171,6 +157,7 @@ def main():
         cc_eval_mean = np.asarray(cc_eval_folds).mean()
         eval_loss_mean = np.asarray(eval_loss_folds).mean()
         print("="*50)
+        print("Resultados trial")
         print("RMSE folds:", np.asarray(rmse_eval_folds))
         print("rmse_eval_mean: ", rmse_eval_mean)
         print("CC folds:", np.asarray(cc_eval_folds))
@@ -199,123 +186,115 @@ def main():
 
 
     print("="*100)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    decimal=1   # decimal al que se desea redondear
-    monkey_name = 'indy'
-    feature = 'sua'
-    scaled = False
+    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cpu')
+    decimal=args.decimal   # decimal al que se desea redondear
+    monkey_name = args.monkey_name
+    feature = args.feature
+    if args.scaled == 0:
+        scaled = False
+    else:
+        scaled = True
+    filename_dataset = args.filename_dataset
+    if args.only_velocity == 0:
+        only_velocity = False
+    else:
+        only_velocity = True
+    n_startup_trials = args.n_startup_trials
+    n_trials = args.n_trials
+    timeout = args.timeout
+    dir_datasets = f'transformers/data/rounded/{monkey_name}' # Directorio donde se encuentran los archivos.'
     # filename_dataset = 'indy_20160627_01_baks.h5' # más grande
     
-    # lematización en archivos del mono con el que se trabajará (redondeo).
-    if monkey_name == 'indy':
-        if len(os.listdir('./datos/05_rounded/indy')) < 37:
-            for filename_dataset in os.listdir('./datos/03_baks/indy'):
-                datasetPreprocessing(filepath_dataset=f"datos/03_baks/indy/{filename_dataset}", filename_dataset=filename_dataset, filepath_output="datos/05_rounded/indy",  rounded_decimal=decimal)
-                break
-        dir_datasets = './datos/05_rounded/indy'
-    else:
-        if len(os.listdir('./datos/05_rounded/loco')) < 10:
-            for filename_dataset in os.listdir('./datos/03_baks/loco'):
-                datasetPreprocessing(filepath_dataset=f"datos/03_baks/loco/{filename_dataset}", filename_dataset=filename_dataset, filepath_output="datos/05_rounded/loco",  rounded_decimal=decimal)
-        dir_datasets = './datos/05_rounded/loco'
-    
-    vocabulary, _, _ = generateBigVocabulary(dir_datasets=dir_datasets, decimal=decimal)
+    # Genero vocabulario
+    if scaled == False:     
+        vocabulary, _, _ = generateBigVocabulary(dir_datasets=dir_datasets, decimal=decimal)
     # Otra opción cuando se normaliza: crear vocabulario con números negativos y positivos, rango amplio para que funcione para todos los archivos.
-
-    # num = 1
-    for filename_dataset in os.listdir(dir_datasets):
-        if (filename_dataset == 'indy_20160411_02_baks_rounded_1.h5' or  
-            filename_dataset == 'indy_20160420_01_baks_rounded_1.h5' or 
-            filename_dataset == 'indy_20160622_01_baks_rounded_1.h5' or 
-            filename_dataset == 'indy_20160624_03_baks_rounded_1.h5' or 
-            filename_dataset == 'indy_20160630_01_baks_rounded_1.h5' or 
-            filename_dataset == 'indy_20160927_04_baks_rounded_1.h5' or 
-            filename_dataset == 'indy_20161005_06_baks_rounded_1.h5' or 
-            filename_dataset == 'indy_20161007_02_baks_rounded_1.h5' or 
-            filename_dataset == 'indy_20161024_03_baks_rounded_1.h5' or 
-            filename_dataset == 'indy_20161026_03_baks_rounded_1.h5' or 
-            filename_dataset == 'indy_20161212_02_baks_rounded_1.h5' or 
-            filename_dataset == 'indy_20161220_02_baks_rounded_1.h5' or 
-            filename_dataset == 'indy_20170124_01_baks_rounded_1.h5' or 
-            filename_dataset == 'indy_20160927_06_baks_rounded_1.h5'
-            ):
-            continue
-        print("Archivo a trabajar:", filename_dataset)
-        # Lectura dataset
-        X, Y = readDataset(f"{dir_datasets}/{filename_dataset}", feature, velocity=True)
-        
-        
-        run_start = timer.time()
-        # create and optimize study
-        study = optuna.create_study(direction="minimize", pruner=optuna.pruners.MedianPruner(n_startup_trials=1))
-        study.optimize(objective, n_trials=20, timeout=100)
-
-        output_filepath = f'datos/06_parameters/{monkey_name}'
-        # output_filepath = f'datos/06_parameters/test'
-        output_filename = filename_dataset.replace('.h5', '.pkl')
-        print(f"Storing study trial into a file: {output_filepath}/{output_filename}")
-        with open(f'{output_filepath}/{output_filename}', 'wb') as f:
-            pickle.dump(study, f)
-
-        pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
-        complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
-
-        print("Study statistics: ")
-        print("  Number of finished trials: ", len(study.trials))
-        print("  Number of pruned trials: ", len(pruned_trials))
-        print("  Number of complete trials: ", len(complete_trials))
-
-        print("Best hyperparameters:")
-        # best_trial = study.best_trial.params # Return the best trial in the study. --> .params
-        # best_params = study.best_params # Return parameters of the best trial in the study.
-        # best_value = study.best_value # Return the best objective value in the study.
-        best_hyperparams = {}       
-        best_hyperparams = study.best_params
-        best_hyperparams["epochs"] = objective.epochs
-        best_hyperparams["filename"] = filename_dataset
-        best_hyperparams["best_rmse_mean"] = study.best_value
-        best_hyperparams["rmse_eval_mean"] = objective.rmse_eval_mean
-        best_hyperparams["cc_eval_mean"] = objective.cc_eval_mean
-        best_hyperparams["eval_loss_mean"] = objective.eval_loss_mean
-        best_hyperparams["rmse_folds"] = objective.rmse_folds
-        best_hyperparams["cc_folds"] = objective.cc_folds
-        best_hyperparams["eval_loss_folds"] = objective.eval_loss_folds
-        run_end = timer.time()
-        run_time = (run_end - run_start) / 60
-        best_hyperparams["run_time"] = run_time
-        best_hyperparams["time_best_trial"] = study.best_trial.duration
-        best_hyperparams["history_train"] = objective.history
-
-        for key, value in best_hyperparams.items():
-            print("    {}: {}".format(key, value))
-
-        param_filepath = f"{output_filepath}/{filename_dataset.replace('.h5', '.json')}"
-        print(f"Storing best params into a file: {param_filepath}")
-        with open(param_filepath, 'w') as f:
-            json.dump(best_hyperparams, f, default=str, indent=2)
-        
-        break
-        # num = num + 1
-        # if num == 14:
-        #     break
+    else:
+        # el valor mínimo encontrado fue 4.2 y el valor máximo de 132.7.
+        vocabulary = np.arange(-10, 150, 10**(-decimal)).round(decimal)
     
-# if __name__ == '__main__':
+    # Directorio archivos de salida (hiperparámetros)
+    if only_velocity:
+        if scaled:
+            dir_output = f'transformers/opt/only_velocity/normalized'
+        else:
+            dir_output = f'transformers/opt/only_velocity/not_normalized'       
+    else:
+        if scaled:
+            dir_output = f'transformers/opt/all_ytask/normalized'
+        else:
+            dir_output = f'transformers/opt/all_ytask/not_normalized'
 
-#     parser = argparse.ArgumentParser()
-#     # Hyperparameters
-#     parser.add_argument('--input_filepath',   type=str,   help='Path to the dataset file')
-#     parser.add_argument('--output_filepath',  type=str,   help='Path to the result file')
-#     parser.add_argument('--seed',             type=float, default=42,     help='Seed for reproducibility')
-#     parser.add_argument('--feature',          type=str,   default='mua',  help='Type of spiking activity (sua or mua)')
-#     parser.add_argument('--decoder',          type=str,   default='qrnn', help='Deep learning based decoding algorithm')
-#     parser.add_argument('--n_folds',          type=int,   default=5,      help='Number of cross validation folds')
-#     parser.add_argument('--min_train_size',   type=float, default=0.5,    help='Minimum (fraction) of training data size')
-#     parser.add_argument('--test_size',        type=float, default=0.1,    help='Testing data size')
-#     parser.add_argument('--verbose',          type=int,   default=0,      help='Wether or not to print the output')
-#     parser.add_argument('--n_trials',         type=int,   default=2,      help='Number of trials for optimization')
-#     parser.add_argument('--timeout',          type=int,   default=300,    help='Stop study after the given number of seconds')
-#     parser.add_argument('--n_startup_trials', type=int,   default=1,      help='Number of trials for which pruning is disabled')
+    print("Archivo a trabajar:", filename_dataset)
+    # Lectura dataset
+    X, Y = readDataset(f"{dir_datasets}/{filename_dataset}", feature, only_velocity=only_velocity)
     
-#     args = parser.parse_args()
-    # main(args)
-main()
+    run_start = timer.time()
+    # create and optimize study
+    study = optuna.create_study(direction="minimize", pruner=optuna.pruners.MedianPruner(n_startup_trials=n_startup_trials))
+    study.optimize(objective, n_trials=n_trials, timeout=timeout)
+
+    params_path = f'{dir_output}/params/{monkey_name}/{feature}'
+    # params_path = f'datos/06_parameters/{monkey_name}'
+    # params_path = f'datos/06_parameters/test'
+    output_filename = filename_dataset.replace('.h5', '.pkl')
+    print(f"Guradando trial del estudio en el archivo: {params_path}/{output_filename}")
+    with open(f'{params_path}/{output_filename}', 'wb') as f:
+        pickle.dump(study, f)
+
+    pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
+    complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
+
+    print("Estadísticas del estudio: ")
+    print("  Número de trials terminados: ", len(study.trials))
+    print("  Número de trials podados: ", len(pruned_trials))
+    print("  Número de trials completos: ", len(complete_trials))
+
+    print("Mejores hiperparámetros:")
+    best_hyperparams = {}       
+    best_hyperparams = study.best_params                            # Return parameters of the best trial in the study.
+    best_hyperparams["epochs"] = objective.epochs                   # Cantidad de épocas suficientes.
+    best_hyperparams["filename"] = filename_dataset                 # Nombre del archivo ejecutado
+    best_hyperparams["best_rmse_mean"] = study.best_value           # Return the best objective value in the study.
+    best_hyperparams["rmse_eval_mean"] = objective.rmse_eval_mean   # RMSE promedio de la evaluación (mejor trial).
+    best_hyperparams["cc_eval_mean"] = objective.cc_eval_mean       # CC promedio de la evaluación (mejor trial).
+    best_hyperparams["eval_loss_mean"] = objective.eval_loss_mean   # loss promedio de la evaluación (mejor trial).
+    best_hyperparams["rmse_folds"] = objective.rmse_folds           # RMSE de todas las evaluaciones.
+    best_hyperparams["cc_folds"] = objective.cc_folds               # CC de todas las evaluaciones.
+    best_hyperparams["eval_loss_folds"] = objective.eval_loss_folds # loss de todas las evaluaciones.
+    run_end = timer.time()
+    run_time = (run_end - run_start) / 60
+    best_hyperparams["run_time"] = run_time                         # Tiempo total ejecución.
+    best_hyperparams["time_best_trial"] = study.best_trial.duration # Tiempo mejor trial.
+    best_hyperparams["history_train"] = objective.history           # Historial de train: RMSE, CC y loss por época.
+
+    for key, value in best_hyperparams.items():
+        print("    {}: {}".format(key, value))
+
+    params_filepath = f"{params_path}/{filename_dataset.replace('.h5', '.json')}"
+    print(f"Guardando los mejores parámetros en el archivo: {params_filepath}")
+    with open(params_filepath, 'w') as f:
+        json.dump(best_hyperparams, f, default=str, indent=2)
+        
+        # break
+
+    
+if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser()
+    # Antes de optimizar
+    parser.add_argument('--decimal',            type=int,   default=1,      help='Decimal al que se desea redondear los archivos. ej: 1')
+    parser.add_argument('--monkey_name',        type=str,   default='indy', help='Nombre del mono de los archivos a trabajar. indy o loco')
+    parser.add_argument('--feature',            type=str,   default='sua',  help='Tipo de spike. sua o mua')
+    parser.add_argument('--scaled',             type=int,   default=0,      help='Normalizar o no los datos. 1=True o 0=False.')
+    parser.add_argument('--filename_dataset',   type=str,                   help='Nombre del archivo a trabajar.')
+    parser.add_argument('--only_velocity',      type=int,   default=1,      help='Salida del modelo solo con velocidad o todo y_task. 1=True o 0=False')
+    # Parámetros optuna
+    parser.add_argument('--n_startup_trials',   type=int,   default=1,      help='Cantidad mínima de trials.')
+    parser.add_argument('--n_trials',           type=int,   default=20,     help='Máximo de trials del estudio.')
+    parser.add_argument('--timeout',            type=int,   default=100,    help='Tiempo límite del estudio [segundos].')
+     
+    args = parser.parse_args()
+    main(args)
+# main()

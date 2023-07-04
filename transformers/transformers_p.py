@@ -1,28 +1,21 @@
-# Siguiendo los pasos del tutorial
 
-import math
+# Librerías
 import numpy as np
 import h5py
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 import os
-from tempfile import TemporaryDirectory
-from typing import Tuple
-
 import torch
-from torch import nn, Tensor
-import torch.nn.functional as F
-from torch.nn import TransformerEncoder, TransformerEncoderLayer
-from torch.utils.data import dataset, DataLoader
-# tiempo
+from torch import nn
+from torch.utils.data import DataLoader
 import time
-
 from process_input import datasetPreprocessing, generateBigVocabulary, DatasetTransformers, readDataset
 from model import TransformerModel, generate_square_subsequent_mask
 from sklearn.metrics import mean_squared_error
 
 # Variables globales
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cpu')
 
 
 def splitDataset(filepath_dataset: str, feature: str, decimal: int, velocity: bool = True, scaled:bool = False):   
@@ -46,7 +39,50 @@ def splitDataset(filepath_dataset: str, feature: str, decimal: int, velocity: bo
        
     return ds_train, ds_eval, ds_test
 
-def splitDataset2(X, Y, decimal: int, limit_sup_train: float = .8, limit_sup_eval: float = .1, scaled:bool = False):   
+def splitDataset2(X, Y, decimal: int, vocabulary = None, limit_sup_train: float = .8, limit_sup_eval: float = .1, scaled:bool = False):   
+    # Separar en train y test del 100% de datos
+    limit_train = int(len(X)*limit_sup_train)
+    X_train = X[:limit_train]
+    Y_train = Y[:limit_train]
+    X_test = X[limit_train:]
+    Y_test = Y[limit_train:]
+
+    # Volver a separar train en: train(90) y eval(10)
+    X_train, X_valid, Y_train, Y_valid = train_test_split(X_train, Y_train, test_size=limit_sup_eval, shuffle=False)
+
+    if scaled and vocabulary!=None:
+        # Scaling the dataset to have mean=0 and variance=1, gives quick model convergence.
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(X_train)
+        X_valid = scaler.transform(X_valid)
+        X_test = scaler.transform(X_test)
+        # Volver a redondear los resultados al decimal=decimal. Tal vez se pierda harta información con esto :s
+        X_train = X_train.round(decimals=decimal)
+        X_valid = X_valid.round(decimals=decimal)
+        X_test = X_test.round(decimals=decimal)    
+          
+        # # Volver a generar vocabulario
+        # mini = min([np.min(X_train), np.min(X_valid), np.min(X_test)])
+        # maxi = max([np.max(X_train), np.max(X_valid), np.max(X_test)])
+        # vocabulary = np.arange(mini, maxi+1, 10**(-decimal)).round(decimal)
+        
+        # Transformo los datos en índices del vocabulario nuevo.   
+        ds_train = DatasetTransformers(X_train, Y_train, decimal=decimal, vocabulary=vocabulary)
+        ds_eval = DatasetTransformers(X_valid, Y_valid, decimal=decimal, vocabulary=vocabulary)
+        ds_test = DatasetTransformers(X_test, Y_test, decimal=decimal, vocabulary=vocabulary)  
+            
+    else:
+        # Transformo los datos en índices del vocabulario original.     
+        ds_train = DatasetTransformers(X_train, Y_train, decimal=decimal)
+        ds_eval = DatasetTransformers(X_valid, Y_valid, decimal=decimal)
+        ds_test = DatasetTransformers(X_test, Y_test, decimal=decimal)  
+    
+    return ds_train, ds_eval, ds_test 
+
+
+
+
+def splitDataset3(X, Y, decimal: int, limit_sup_train: float = .8, limit_sup_eval: float = .1, scaled:bool = False):   
     # Separar en train y test del 100% de datos
     limit_train = int(len(X)*limit_sup_train)
     X_train = X[:limit_train]
@@ -66,25 +102,25 @@ def splitDataset2(X, Y, decimal: int, limit_sup_train: float = .8, limit_sup_eva
         # Volver a redondear los resultados al decimal=decimal. Tal vez se pierda harta información con esto :s
         X_train = X_train.round(decimals=decimal)
         X_valid = X_valid.round(decimals=decimal)
-        X_test = X_test.round(decimals=decimal)      
+        X_test = X_test.round(decimals=decimal)    
+          
         # Volver a generar vocabulario
         mini = min([np.min(X_train), np.min(X_valid), np.min(X_test)])
         maxi = max([np.max(X_train), np.max(X_valid), np.max(X_test)])
-        num = 1
-        for i in range(decimal):
-            num = num/10
-        vocabulary = np.arange(mini, maxi+1, num).round(decimal)
+        vocabulary = np.arange(mini, maxi+1, 10**(-decimal)).round(decimal)
+        
         # Transformo los datos en índices del vocabulario nuevo.   
         ds_train = DatasetTransformers(X_train, Y_train, decimal=decimal, vocabulary=vocabulary)
         ds_eval = DatasetTransformers(X_valid, Y_valid, decimal=decimal, vocabulary=vocabulary)
         ds_test = DatasetTransformers(X_test, Y_test, decimal=decimal, vocabulary=vocabulary)  
-        return ds_train, ds_eval, ds_test, vocabulary    
+        return ds_train, ds_eval, ds_test, vocabulary
     else:
         # Transformo los datos en índices del vocabulario original.     
         ds_train = DatasetTransformers(X_train, Y_train, decimal=decimal)
         ds_eval = DatasetTransformers(X_valid, Y_valid, decimal=decimal)
         ds_test = DatasetTransformers(X_test, Y_test, decimal=decimal)  
-        return ds_train, ds_eval, ds_test 
+        return ds_train, ds_eval, ds_test
+     
        
     
 
@@ -177,8 +213,8 @@ def train(model: nn.Module, epochs: int, batch_size: int, train_dl: DataLoader, 
         # val_ppl = math.exp(val_loss)
         elapsed = time.time() - epoch_start_time
         # print('-' * 89)
-        print(f'| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | '
-            f'valid loss {val_loss/1000:5.2f}')
+        # print(f'| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | '
+        #     f'valid loss {val_loss/1000:5.2f}')
         # print('-' * 89)
         
         # scheduler.step()
