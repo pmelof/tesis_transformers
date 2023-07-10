@@ -288,7 +288,7 @@ if __name__ == '__main__':
     parser.add_argument('--monkey_name',        type=str,   default='indy', help='Nombre del mono de los archivos a trabajar. indy o loco')
     parser.add_argument('--feature',            type=str,   default='sua',  help='Tipo de spike. sua o mua')
     parser.add_argument('--scaled',             type=int,   default=0,      help='Normalizar o no los datos. 1=True o 0=False.')
-    parser.add_argument('--filename_dataset',   type=str,                   help='Nombre del archivo a trabajar.')
+    parser.add_argument('--filename_dataset',   type=str,                   help='Nombre del archivo a trabajar. (datos redondeadoos con extensión .h5)')
     parser.add_argument('--only_velocity',      type=int,   default=1,      help='Salida del modelo solo con velocidad o todo y_task. 1=True o 0=False')
     # Parámetros optuna
     parser.add_argument('--n_startup_trials',   type=int,   default=1,      help='Cantidad mínima de trials.')
