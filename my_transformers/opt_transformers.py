@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 from transformers_p import  splitDataset2, train, evaluate, reshapeOutput, pearson_corrcoef
 from model import TransformerModel
 import torch
-from process_input import generateBigVocabulary, readDataset, transform_data, datasetPreprocessing
+from process_input import generateBigVocabulary, readDataset, transform_data
 
 
 class EarlyStopper:
@@ -41,25 +41,22 @@ class EarlyStopper:
 
 def main(args):
     def objective(trial):
-        max_timesteps = 5
-        max_layers = 2
         max_d_model = 120 # d_model
 
         config = {           
             "input_dim" : len(X[0]), # dimensión de entrada de la base de datos. ej = 116
             "output_dim": len(Y[0]), # dimensión de salida de la base de datos. ej = 2
             "n_token": len(vocabulary),  # size of vocabulary
-            "d_model": trial.suggest_int("d_model", 20, max_d_model, step=20), # embedding dimension
+            "d_model": trial.suggest_int("d_model", 20, max_d_model, step=50), # embedding dimension (d_model = 20, 70, 120)
             "d_hid" : 20,  # dimension of the feedforward network model in ``nn.TransformerEncoder``
-            "n_layers" : trial.suggest_int("n_layers", 1, max_layers),  # number of ``nn.TransformerEncoderLayer`` in ``nn.TransformerEncoder``
+            "n_layers" : 1,  # number of ``nn.TransformerEncoderLayer`` in ``nn.TransformerEncoder``
             "n_head" : 2,  # number of heads in ``nn.MultiheadAttention``
-            "dropout": trial.suggest_float("dropout", 0.1, 0.5, step=0.1),  # dropout probability
-            "batch_size": trial.suggest_categorical("batch_size", [32, 64, 96]),
-            "epochs": 100,
-            "learning_rate": trial.suggest_float("learning_rate", 1e-4, 0.1, log=True),           
-            "optimizer": trial.suggest_categorical("optimizer", ['Adam', 'RMSProp']),
-            "timesteps": trial.suggest_int("timesteps", 1, max_timesteps),
-            # "window_size": 2,
+            "dropout": trial.suggest_float("dropout", 0.1, 0.3, step=0.1),  # dropout probability (dropout = 0.1, 0.2, 0.3)
+            "batch_size": 96,
+            "epochs": 3,
+            "learning_rate": trial.suggest_float("learning_rate", 1e-4, 9e-4, step=1e-4), # (learning_rate = 0.0001, ..., 0.0009)       
+            "optimizer": 'Adam',
+            "timesteps": 2
             }
         print(config)  
         
@@ -108,8 +105,8 @@ def main(args):
 
             # Entrenar modelo
             print("Entrenando modelo")
-            best_weights_path = os.path.join(f'{dir_output}/best_weights/{monkey_name}/{feature}', f"{filename_dataset.replace('.h5', '.pt')}")
-            # best_model_params_path = os.path.join(f"transformers/best_params/best_weights_{monkey_name}/opt", f"{filename_dataset.replace('.h5', '.pt')}")
+            weights_path = os.path.join(f'{dir_output}/best_weights/{monkey_name}/{feature}', f"{filename_dataset.replace('.h5', '.pt')}")
+            # best_model_params_path = os.path.join(f"my_transformers/best_params/best_weights_{monkey_name}/opt", f"{filename_dataset.replace('.h5', '.pt')}")
             train_start = timer.time()
             history = train(model, 
                 epochs=config['epochs'], 
@@ -120,7 +117,7 @@ def main(args):
                 train_ds=train_ds, 
                 eval_ds=eval_ds, 
                 eval_dl=eval_dl, 
-                best_model_params_path=best_weights_path,
+                best_model_params_path=weights_path,
                 early_stopper=earlystop)
             train_end = timer.time()
             train_time = (train_end - train_start) / 60
@@ -138,7 +135,7 @@ def main(args):
             print(f"El entrenamiento duró {train_time:.2f} minutos")
             
             # Cargo los mejores pesos del modelo entrenado
-            model.load_state_dict(torch.load(best_weights_path)) # load best model states   
+            model.load_state_dict(torch.load(weights_path)) # load best model states   
             # Evaluo el modelo
             eval_loss, Y_pred = evaluate(model, eval_dl, config['batch_size'])
 
@@ -175,6 +172,23 @@ def main(args):
             objective_rmse_eval_mean = rmse_eval_mean+1
             
         if (objective_rmse_eval_mean > rmse_eval_mean):
+            # También guardar mejores pesos modelo en un archivo... best_weights_path
+            # Crear modelo
+            model = TransformerModel(
+                input_dim=config['input_dim'], 
+                output_dim=config['output_dim'], 
+                n_token=config['n_token'],
+                d_model=config['d_model'], 
+                d_hid=config['d_hid'], 
+                n_layers=config['n_layers'], 
+                n_head=config['n_head'], 
+                dropout=config['dropout']
+            ).to(device)
+            weights_path = os.path.join(f'{dir_output}/best_weights/{monkey_name}/{feature}', f"{filename_dataset.replace('.h5', '.pt')}")
+            model.load_state_dict(torch.load(weights_path))
+            best_weights_path = os.path.join(f'{dir_output}/best_weights/{monkey_name}/{feature}', f"{filename_dataset[:-3]}_best.pt")
+            torch.save(model.state_dict(), best_weights_path)
+            
             objective.rmse_folds = np.asarray(rmse_eval_folds)
             objective.cc_folds = np.asarray(cc_eval_folds)
             objective.eval_loss_folds = np.asarray(eval_loss_folds)
@@ -203,7 +217,7 @@ def main(args):
     n_startup_trials = args.n_startup_trials
     n_trials = args.n_trials
     timeout = args.timeout
-    dir_datasets = f'transformers/data/rounded/{monkey_name}' # Directorio donde se encuentran los archivos.'
+    dir_datasets = f'my_transformers/data/rounded/{monkey_name}' # Directorio donde se encuentran los archivos.'
     # filename_dataset = 'indy_20160627_01_baks.h5' # más grande
     
     # Genero vocabulario
@@ -217,14 +231,14 @@ def main(args):
     # Directorio archivos de salida (hiperparámetros)
     if only_velocity:
         if scaled:
-            dir_output = f'transformers/opt/only_velocity/normalized'
+            dir_output = f'my_transformers/opt/only_velocity/normalized'
         else:
-            dir_output = f'transformers/opt/only_velocity/not_normalized'       
+            dir_output = f'my_transformers/opt/only_velocity/not_normalized'       
     else:
         if scaled:
-            dir_output = f'transformers/opt/all_ytask/normalized'
+            dir_output = f'my_transformers/opt/all_ytask/normalized'
         else:
-            dir_output = f'transformers/opt/all_ytask/not_normalized'
+            dir_output = f'my_transformers/opt/all_ytask/not_normalized'
 
     print("Archivo a trabajar:", filename_dataset)
     # Lectura dataset
@@ -236,8 +250,6 @@ def main(args):
     study.optimize(objective, n_trials=n_trials, timeout=timeout)
 
     params_path = f'{dir_output}/params/{monkey_name}/{feature}'
-    # params_path = f'datos/06_parameters/{monkey_name}'
-    # params_path = f'datos/06_parameters/test'
     output_filename = filename_dataset.replace('.h5', '.pkl')
     print(f"Guradando trial del estudio en el archivo: {params_path}/{output_filename}")
     with open(f'{params_path}/{output_filename}', 'wb') as f:

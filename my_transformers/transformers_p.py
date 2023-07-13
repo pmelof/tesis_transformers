@@ -50,7 +50,7 @@ def splitDataset2(X, Y, decimal: int, vocabulary = None, limit_sup_train: float 
     # Volver a separar train en: train(90) y eval(10)
     X_train, X_valid, Y_train, Y_valid = train_test_split(X_train, Y_train, test_size=limit_sup_eval, shuffle=False)
 
-    if scaled and vocabulary!=None:
+    if scaled and vocabulary is not None:
         # Scaling the dataset to have mean=0 and variance=1, gives quick model convergence.
         scaler = StandardScaler()
         X_train = scaler.fit_transform(X_train)
@@ -317,7 +317,7 @@ if run_example:
     # optimizer = torch.optim.SGD(model.parameters(), lr=lr)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
-    best_model_params_path = os.path.join("transformers/best_params", "best_model_params.pt")
+    best_model_params_path = os.path.join("my_transformers/best_params", "best_model_params.pt")
 
     ######################################################################
     # Loop over epochs. Save the model if the validation loss is the best
@@ -354,7 +354,7 @@ if run_example:
     plt.plot(np.transpose(test_ds.Y)[0][:100], color = 'tab:blue', label = 'True')
     plt.ylabel('x-velocidad')
     plt.xlabel('Tiempo [s]')
-    plt.title('Velocidad real vs velocidad QRNN', fontdict = {'fontsize':14, 'fontweight':'bold'})
+    plt.title('Velocidad real vs velocidad Transformers', fontdict = {'fontsize':14, 'fontweight':'bold'})
     #plt.legend(bbox_to_anchor=(1.25, -0.1), loc = 'lower right')
     plt.subplot(2, 2, 2)
     plt.plot(np.transpose(Y_pred)[1][:100], '--', color = 'tab:red', label = 'Transformers')

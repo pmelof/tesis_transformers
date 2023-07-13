@@ -49,11 +49,17 @@ def main(args):
         scaled = True
     filename_dataset = args.filename_dataset    # datos redondeados con extensión .h5
     # filename_dataset = 'indy_20161007_02_baks_rounded_1.h5'
+    # filename_dataset = 'indy_20161017_02_baks_rounded_1.h5'
     if args.only_velocity == 0:
         only_velocity = False
     else:
         only_velocity = True
-    dir_datasets = f'transformers/data/rounded/{monkey_name}' # Directorio donde se encuentran los archivos.'
+    dir_datasets = f'my_transformers/data/rounded/{monkey_name}' # Directorio donde se encuentran los archivos.'
+    if args.use_weights == 0:
+        use_weights = False
+    else:
+        use_weights = True
+    dir_datasets = f'my_transformers/data/rounded/{monkey_name}' # Directorio donde se encuentran los archivos.'
     
     # Genero vocabulario
     if scaled == False:     
@@ -66,14 +72,14 @@ def main(args):
     # Directorio archivos de salida (resultados) 
     if only_velocity:
         if scaled:
-            dir_output = f'transformers/eval/only_velocity/normalized'
+            dir_output = f'my_transformers/eval/only_velocity/normalized'
         else:
-            dir_output = f'transformers/eval/only_velocity/not_normalized'       
+            dir_output = f'my_transformers/eval/only_velocity/not_normalized'       
     else:
         if scaled:
-            dir_output = f'transformers/eval/all_ytask/normalized'
+            dir_output = f'my_transformers/eval/all_ytask/normalized'
         else:
-            dir_output = f'transformers/eval/all_ytask/not_normalized'   
+            dir_output = f'my_transformers/eval/all_ytask/not_normalized'   
 
     # path donde se encuentra el archivo con la configuración del modelo creada por opt
     config_filepath = os.path.join(dir_output.replace('eval', 'opt'), f'params/{monkey_name}/{feature}', filename_dataset.replace('.h5', '.json'))
@@ -97,7 +103,6 @@ def main(args):
         # Definiendo configuración del modelo a partir de los argumentos
         config = {           
             "d_model": args.d_model, # embedding dimension
-            "n_layers" : args.n_layers,  # number of ``nn.TransformerEncoderLayer`` in ``nn.TransformerEncoder``
             "dropout": args.dropout,  # dropout probability
             "batch_size": args.batch_size,
             "epochs": args.epochs,
@@ -109,7 +114,11 @@ def main(args):
     config["output_dim"] = len(Y[0]) # Dimensión de salida de la base de datos. ej = 2
     config["n_token"] = len(vocabulary)  # Tamaño del vocabulario
     config["d_hid"] = 20  # dimension of the feedforward network model in ``nn.TransformerEncoder``
+    config["n_layers"] = 1 # number of ``nn.TransformerEncoderLayer`` in ``nn.TransformerEncoder``
     config["n_head"] = 2 # number of heads in ``nn.MultiheadAttention``
+    config["batch_size"] = 96
+    config["optimizer"] = "Adam"
+    config["timesteps"] = 2
     print(f"Configuración de hiperparámetros: {config}")
     
     # setear semilla
@@ -121,7 +130,7 @@ def main(args):
     
     # Creando las 5 ventanas
     windows = [.5, .6, .7, .8, .9] # % del tamaño de train (lo que quede se separá 90-10 en train y eval)
-    # windows = [.8, .9]     
+    save_history = {}     
     for window in windows: 
         print("FOLDS:", window)
         config["input_dim"] = len(X[0]) # dimensión de entrada de la base de datos. ej = 116
@@ -154,26 +163,35 @@ def main(args):
             dropout=config['dropout']
         ).to(device)
         
-        
-        # Entrenar modelo
-        print("Entrenando modelo")
-        best_weights_path = os.path.join(f'{dir_output}/best_weights/{monkey_name}/{feature}', f"{filename_dataset.replace('.h5', '.pt')}")
-        # best_model_params_path = os.path.join(f"transformers/best_params/best_weights_{monkey_name}/opt", f"{filename_dataset.replace('.h5', '.pt')}")
-        train_start = timer.time()
-        history = train(model, 
-            epochs=config['epochs'], 
-            batch_size=config['batch_size'], 
-            train_dl=train_dl, 
-            optimizer=config['optimizer'], 
-            learning_rate=config['learning_rate'],
-            train_ds=train_ds, 
-            eval_ds=eval_ds, 
-            eval_dl=eval_dl, 
-            best_model_params_path=best_weights_path)
-        train_end = timer.time()
-        train_time = (train_end - train_start) / 60
+        if use_weights:
+            best_weights_path = os.path.join(f'{dir_output.replace("eval", "opt")}/best_weights/{monkey_name}/{feature}', f"{filename_dataset[:-3]}_best.pt")
+            print(f"Se usan los pesos del modelo previamente entrenados guardados en el archivo: {best_weights_path}")
+        else:
+            # Entrenar modelo
+            print("Entrenando modelo")
+            best_weights_path = os.path.join(f'{dir_output}/best_weights/{monkey_name}/{feature}', f"{filename_dataset.replace('.h5', '.pt')}")
+            # best_model_params_path = os.path.join(f"my_transformers/best_params/best_weights_{monkey_name}/opt", f"{filename_dataset.replace('.h5', '.pt')}")
+            train_start = timer.time()
+            history = train(model, 
+                epochs=config['epochs'], 
+                batch_size=config['batch_size'], 
+                train_dl=train_dl, 
+                optimizer=config['optimizer'], 
+                learning_rate=config['learning_rate'],
+                train_ds=train_ds, 
+                eval_ds=eval_ds, 
+                eval_dl=eval_dl, 
+                best_model_params_path=best_weights_path)
+            train_end = timer.time()
+            train_time = (train_end - train_start) / 60
 
-        print(f"El entrenamiento duró {train_time:.2f} minutos")
+            print(f"El entrenamiento duró {train_time:.2f} minutos")
+             
+            save_history[f"history_train_fold_{window}"] = history           # Historial de train: RMSE, CC y loss por época.
+            history_filepath = f"{output_filepath.replace('.h5', '.json')}"
+            print(f"Guardando historial de train en el archivo: {history_filepath}")
+            with open(history_filepath, 'w') as f:
+                json.dump(save_history, f, default=str, indent=2)
         
         # Cargo los mejores pesos del modelo entrenado
         model.load_state_dict(torch.load(best_weights_path)) # load best model states   
@@ -206,14 +224,6 @@ def main(args):
         # f['history_rmse_train'] = np.asarray(history_rmse_train)    # RMSE en train por época
         # f['history_cc_train'] = np.asarray(history_cc_train)        # CC en train por época
      
-    save_history = {}       
-    save_history["history_train"] = history           # Historial de train: RMSE, CC y loss por época.
-
-    history_filepath = f"{output_filepath.replace('.h5', '.json')}"
-    print(f"Guardando historial de train en el archivo: {history_filepath}")
-    with open(history_filepath, 'w') as f:
-        json.dump(save_history, f, default=str, indent=2)
-
     run_end = timer.time()
     run_time = (run_end - run_start) / 60
     print (f"Whole processes took {run_time:.2f} minutes")
@@ -226,7 +236,7 @@ def main(args):
     plt.plot(np.transpose(test_ds.Y)[0][:200], color = 'tab:blue', label = 'True')
     plt.ylabel('x-velocidad')
     plt.xlabel('Tiempo [s]')
-    plt.title('Velocidad real vs velocidad QRNN', fontdict = {'fontsize':14, 'fontweight':'bold'})
+    plt.title('Velocidad real vs velocidad Transformers', fontdict = {'fontsize':14, 'fontweight':'bold'})
     #plt.legend(bbox_to_anchor=(1.25, -0.1), loc = 'lower right')
     plt.subplot(2, 1, 2)
     plt.plot(np.transpose(Y_pred_test)[1][:200], '--', color = 'tab:red', label = 'Transformers')
@@ -248,21 +258,22 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # Hiperparámetros
     parser.add_argument('--decimal',            type=int,   default=1,      help='Decimal al que se desea redondear los archivos. ej: 1')
-    parser.add_argument('--monkey_name',        type=str,   default='indy', help='Nombre del mono de los archivos a trabajar. indy o loco')
+    parser.add_argument('--monkey_name',        type=str,   default='loco', help='Nombre del mono de los archivos a trabajar. indy o loco')
     parser.add_argument('--feature',            type=str,   default='sua',  help='Tipo de spike. sua o mua')
-    parser.add_argument('--scaled',             type=int,   default=0,      help='Normalizar o no los datos. 1=True o 0=False.')
+    parser.add_argument('--scaled',             type=int,   default=1,      help='Normalizar o no los datos. 1=True o 0=False.')
     parser.add_argument('--filename_dataset',   type=str,                   help='Nombre del archivo a trabajar. (datos redondeadoos con extensión .h5).')
     parser.add_argument('--only_velocity',      type=int,   default=1,      help='Salida del modelo solo con velocidad o todo y_task. 1=True o 0=False')
+    parser.add_argument('--use_weights',        type=int,   default=0,      help='¿Se desea ejecutar train otra vez? o mejor usar los pesos guardados. 1=True o 0=False')
     # parser.add_argument('--filename_config',    type=str,                   help='Nombre del archivo con las configuraciones del modelo.')
     # para el modelo de Transformers
     parser.add_argument('--d_model',            type=int,   default=20,     help='Dimensión del embedding')
     parser.add_argument('--n_layers',           type=int,   default=1,      help='Número de capas')
     parser.add_argument('--dropout',            type=float, default=0.2,    help='Dropout rate')
-    parser.add_argument('--batch_size',         type=int,   default=32,     help='Batch size')
+    parser.add_argument('--batch_size',         type=int,   default=96,     help='Batch size')
     parser.add_argument('--epochs',             type=int,   default=50,     help='Número de épocas')
-    parser.add_argument('--learning_rate',      type=float, default=0.001,  help='Learning rate')
+    parser.add_argument('--learning_rate',      type=float, default=0.0001,  help='Learning rate')
     parser.add_argument('--optimizer',          type=str,   default='Adam', help='Optimizer') 
-    parser.add_argument('--timesteps',          type=int,   default=1,      help='Cantidad de arreglos para secuencializar. 1, ..., 5.')
+    parser.add_argument('--timesteps',          type=int,   default=2,      help='Cantidad de arreglos para secuencializar. 1, ..., 5.')
      
     args = parser.parse_args()
     main(args)
