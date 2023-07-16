@@ -12,7 +12,7 @@ from sklearn.metrics import mean_squared_error
 import time as timer
 
 from torch.utils.data import DataLoader
-from transformers_p import splitDataset2, train, evaluate, reshapeOutput, pearson_corrcoef
+from transformers_p import splitDatasetAndTokenization, train, evaluate, reshapeOutput, pearson_corrcoef
 from model import TransformerModel
 import torch
 from process_input import generateBigVocabulary, readDataset, transform_data
@@ -136,9 +136,9 @@ def main(args):
         config["input_dim"] = len(X[0]) # dimensión de entrada de la base de datos. ej = 116
         
         if scaled:
-            train_ds, eval_ds, test_ds = splitDataset2(X, Y, decimal, vocabulary=vocabulary, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
+            train_ds, eval_ds, test_ds = splitDatasetAndTokenization(X, Y, decimal, vocabulary=vocabulary, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
         else:
-            train_ds, eval_ds, test_ds = splitDataset2(X, Y, decimal, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
+            train_ds, eval_ds, test_ds = splitDatasetAndTokenization(X, Y, decimal, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
         
         # Secuencializando los datos
         if config['timesteps'] != 1:

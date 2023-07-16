@@ -14,10 +14,10 @@ from optuna.trial import TrialState
 import time as timer
    
 from torch.utils.data import DataLoader
-from transformers_p import  splitDataset2, train, evaluate, reshapeOutput, pearson_corrcoef
+from transformers_p import  splitDatasetAndTokenization, train, evaluate, reshapeOutput, pearson_corrcoef, splitDataset
 from model import TransformerModel
 import torch
-from process_input import generateBigVocabulary, readDataset, transform_data
+from process_input import generateBigVocabulary, readDataset, transform_data, appendFiles, flattenFiles, DatasetTransformers
 
 
 class EarlyStopper:
@@ -44,8 +44,8 @@ def main(args):
         max_d_model = 120 # d_model
 
         config = {           
-            "input_dim" : len(X[0]), # dimensión de entrada de la base de datos. ej = 116
-            "output_dim": len(Y[0]), # dimensión de salida de la base de datos. ej = 2
+            "input_dim" : 0, # dimensión de entrada de la base de datos. ej = 116
+            "output_dim": 0, # dimensión de salida de la base de datos. ej = 2
             "n_token": len(vocabulary),  # size of vocabulary
             "d_model": trial.suggest_int("d_model", 20, max_d_model, step=50), # embedding dimension (d_model = 20, 70, 120)
             "d_hid" : 20,  # dimension of the feedforward network model in ``nn.TransformerEncoder``
@@ -71,13 +71,45 @@ def main(args):
         windows = [.5, .6, .7, .8, .9] # % del tamaño de train (lo que quede se separá 90-10 en train y eval)
         # windows = [.8, .9]
         for window in windows:  
-            print("FOLDS:", window)
-            config["input_dim"] = len(X[0]) # dimensión de entrada de la base de datos. ej = 116
-        
-            if scaled:
-                train_ds, eval_ds, _ = splitDataset2(X, Y, decimal, vocabulary=vocabulary, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
+            print("FOLDS:", window)    
+            
+            # Se trabajan con varios archivos
+            if list_filenames is not None and len(list_filenames) > 1:
+                Xs, Ys = appendFiles(list_filenames=list_filenames, filespath_baks=dir_datasets, feature=feature, only_velocity=only_velocity, padding=padding)
+                X_train_group = []
+                Y_train_group = []
+                X_eval_group = []
+                Y_eval_group = []
+                i = 0
+                while i < len(Xs):
+                    # Separar en train, eval y test para cada archivo
+                    X_train, Y_train, X_eval, Y_eval, _, _ = splitDataset(X=Xs[i], Y=Ys[i], decimal=decimal, limit_sup_train=window, limit_sup_eval=.1, scaled=scaled)
+                    X_train_group.append(X_train)
+                    Y_train_group.append(Y_train)
+                    X_eval_group.append(X_eval)
+                    Y_eval_group.append(Y_eval)
+                    i=i+1
+                X_train_group, Y_train_group, X_eval_group, Y_eval_group, _, _ = flattenFiles(X_train=X_train_group, Y_train=Y_train_group, X_eval=X_eval_group, Y_eval=Y_eval_group)
+                if scaled:
+                    # Transformo los datos en índices del vocabulario normalizado.   
+                    train_ds = DatasetTransformers(X_train_group, Y_train_group, decimal=decimal, vocabulary=vocabulary)
+                    eval_ds = DatasetTransformers(X_eval_group, Y_eval_group, decimal=decimal, vocabulary=vocabulary)
+                else:
+                    # Transformo los datos en índices del vocabulario original.     
+                    train_ds = DatasetTransformers(X_train_group, Y_train_group, decimal=decimal)
+                    eval_ds = DatasetTransformers(X_eval_group, Y_eval_group, decimal=decimal)
+                config["input_dim"] = len(X_train_group[0]) # dimensión de entrada de la base de datos. ej = 116
+                config["output_dim"] = len(Y_train_group[0]) # dimensión de salida de la base de datos. ej = 2
+            
+            # Se trabaja con un solo archivo
             else:
-                train_ds, eval_ds, _ = splitDataset2(X, Y, decimal, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
+                config["input_dim"] = len(X[0]) # dimensión de entrada de la base de datos. ej = 116
+                config["output_dim"] = len(Y[0]) # dimensión de salida de la base de datos. ej = 2
+        
+                if scaled:
+                    train_ds, eval_ds, _ = splitDatasetAndTokenization(X, Y, decimal, vocabulary=vocabulary, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
+                else:
+                    train_ds, eval_ds, _ = splitDatasetAndTokenization(X, Y, decimal, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
             
             # Secuencializando los datos
             if config['timesteps'] != 1:
@@ -202,6 +234,7 @@ def main(args):
     print("="*100)
     # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     device = torch.device('cpu')
+    # Definición variables por argumento
     decimal=args.decimal   # decimal al que se desea redondear
     monkey_name = args.monkey_name
     feature = args.feature
@@ -214,11 +247,21 @@ def main(args):
         only_velocity = False
     else:
         only_velocity = True
+    list_filenames = args.list_filenames
+    if args.padding == 0:
+        padding = False
+    else:
+        padding = True   
     n_startup_trials = args.n_startup_trials
     n_trials = args.n_trials
     timeout = args.timeout
     dir_datasets = f'my_transformers/data/rounded/{monkey_name}' # Directorio donde se encuentran los archivos.'
+    
+    # pruebas
     # filename_dataset = 'indy_20160627_01_baks.h5' # más grande
+    filename_dataset = 'indy_20161017_02_baks_rounded_1.h5'
+    # list_filenames = ['indy_20161017_02_baks_rounded_1.h5', 'indy_20160407_02_baks_rounded_1.h5']
+    list_filenames = ['indy_20160407_02_baks_rounded_1.h5']
     
     # Genero vocabulario
     if scaled == False:     
@@ -239,10 +282,20 @@ def main(args):
             dir_output = f'my_transformers/opt/all_ytask/normalized'
         else:
             dir_output = f'my_transformers/opt/all_ytask/not_normalized'
-
-    print("Archivo a trabajar:", filename_dataset)
-    # Lectura dataset
-    X, Y = readDataset(f"{dir_datasets}/{filename_dataset}", feature, only_velocity=only_velocity)
+            
+    # Renombro archivo cuando se agrupan varios
+    if list_filenames is not None and len(list_filenames) > 1:
+        new_name = "join"
+        print("Archivos por agrupar y trabajar:")
+        for name in list_filenames:
+            print(name)
+            text = name.replace(f"_baks_rounded_{decimal}.h5", "") 
+            new_name = new_name + "_" + text
+        filename_dataset = new_name + ".h5"           
+    else:
+        print("Archivo a trabajar:", filename_dataset)
+        # Lectura dataset
+        X, Y = readDataset(f"{dir_datasets}/{filename_dataset}", feature, only_velocity=only_velocity)
     
     run_start = timer.time()
     # create and optimize study
@@ -299,9 +352,11 @@ if __name__ == '__main__':
     parser.add_argument('--decimal',            type=int,   default=1,      help='Decimal al que se desea redondear los archivos. ej: 1')
     parser.add_argument('--monkey_name',        type=str,   default='indy', help='Nombre del mono de los archivos a trabajar. indy o loco')
     parser.add_argument('--feature',            type=str,   default='sua',  help='Tipo de spike. sua o mua')
-    parser.add_argument('--scaled',             type=int,   default=0,      help='Normalizar o no los datos. 1=True o 0=False.')
+    parser.add_argument('--scaled',             type=int,   default=1,      help='Normalizar o no los datos. 1=True o 0=False.')
     parser.add_argument('--filename_dataset',   type=str,                   help='Nombre del archivo a trabajar. (datos redondeadoos con extensión .h5)')
     parser.add_argument('--only_velocity',      type=int,   default=1,      help='Salida del modelo solo con velocidad o todo y_task. 1=True o 0=False')
+    parser.add_argument('--list_filenames',     type=list,  default=None,   help='Lista con archivos para agrupar.')
+    parser.add_argument('--padding',            type=int,   default=1,      help='Si se desea usar padding o no al agrupar archivos. 1=True o 0=False')
     # Parámetros optuna
     parser.add_argument('--n_startup_trials',   type=int,   default=1,      help='Cantidad mínima de trials.')
     parser.add_argument('--n_trials',           type=int,   default=20,     help='Máximo de trials del estudio.')

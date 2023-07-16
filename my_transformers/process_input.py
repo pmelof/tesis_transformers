@@ -255,22 +255,107 @@ def transform_data(X, y, timesteps):
 
 
 # Juntar varios archivos como uno solo
-def appendFiles(list_filenames: list, filespath_baks: str, padding: bool = True):
-    assert len(list_filenames) <= 1, "Lista de archivos con 1 o menos archivos"
-    X_mua = np.array([])
-    X_sua = np.array([])
-    y_task = np.array([])  
+def appendFiles(list_filenames: list, filespath_baks: str, feature: str, only_velocity: bool = True, padding: bool = True,):
+    '''
+    Agrupa varios archivos en una lista para X e Y.
+    Para que el número de columnas de todos los archivos coincidan se ocupa padding (rellenando con 0) o se trunca
+    a la cantidad menor de columnas.
+    ------------
+    Parámetros:
+    list_filenames: List
+        Lista de strings con los nombres de los archivos a agrupar.
+        ej: ['loco_01.h5', 'loco_03.h5', 'loco_04.h5']
+    filespath_baks: String
+        Dirección de la carpeta donde se encuentran los archivos a agrupar.
+        ej: 'data/rounded/loco'
+    feature: String
+        Tipo de señal con la que se trabajará.
+        ej: 'sua' o 'mua'
+    only_velocity: Bool
+        Si se trabaja solo con la salida velocidad o no.
+    padding: Bool
+        Si se desea usar padding o truncar.
+    ------------
+    Retorna:
+    Xs: List
+        Lista con SUA o MUA de todos los archivos.
+    Ys: List
+        Lista con las salidas de todos los archivos.
+    '''
+    assert len(list_filenames) > 1, "Lista nombre de archivos con 1 o menos archivos"
+    Xs = []
+    Ys = []
+    max_cols = 0
+    min_cols = 999999999999999999999
                 
     for file in list_filenames:
         filepath = os.path.join(filespath_baks, file)
-        with h5py.File(filepath, 'r') as f:
-            temp_X_mua = f[f'X_mua'][()]
-            temp_X_sua = f[f'X_sua'][()]
-            temp_y_task = f['y_task'][()]  
-        X_mua.np.append(temp_X_mua)
-        X_sua.np.append(temp_X_sua)
-        y_task.np.append(temp_y_task)
+        X, Y = readDataset(filepath_dataset=filepath, feature=feature, only_velocity=only_velocity)
+        Xs.append(X)
+        Ys.append(Y)
+        # calculando cantidad columnas máximo y mínimo de todos los archivos
+        if max_cols < len(X[0]):
+            max_cols = len(X[0]) 
+        if min_cols > len(X[0]):
+            min_cols = len(X[0])
+
+    # Las columnas deben ser el mismo número para todos 
+    if padding: # rellenando con 0 espacios faltantes
+        i = 0
+        while i < len(Xs):
+            if len(Xs[i][0]) != max_cols:
+                resto = max_cols - len(Xs[i][0])
+                Xs[i] = np.pad(Xs[i], (0,resto), constant_values=(0))
+                Xs[i] = Xs[i][:-resto]
+            i=i+1
+    else: # truncar
+        i = 0
+        while i < len(Xs):
+            if len(Xs[i][0]) != min_cols:
+                resto = len(Xs[i][0]) - min_cols
+                temp = []
+                for elem in Xs[i]:
+                    elem = list(elem[:-resto])
+                    temp.append(elem)
+                Xs[i] = np.array(temp)
+            i=i+1
+    return Xs, Ys
 
 
+def flattenFiles(X_train, Y_train, X_eval, Y_eval, X_test=None, Y_test=None):
+    new_X_train = []
+    new_Y_train = []
+    new_X_eval = []
+    new_Y_eval = []
+    new_X_test = []
+    new_Y_test = []
+    i=0
+    while i < len(X_train):
+        for elem in X_train[i]:
+            temp = elem.tolist()
+            new_X_train.append(temp)
+        for elem in Y_train[i]:
+            temp = elem.tolist()
+            new_Y_train.append(temp)
+        i=i+1
+    i=0
+    while i < len(X_eval):
+        for elem in X_eval[i]:
+            temp = elem.tolist()
+            new_X_eval.append(temp)
+        for elem in Y_eval[i]:
+            temp = elem.tolist()
+            new_Y_eval.append(temp)
+        i=i+1 
+    if X_test is not None:
+        i=0
+        while i < len(X_test):
+            for elem in X_test[i]:
+                temp = elem.tolist()
+                new_X_test.append(temp)
+            for elem in Y_test[i]:
+                temp = elem.tolist()
+                new_Y_test.append(temp)
+            i=i+1    
 
-    return
+    return np.array(new_X_train), np.array(new_Y_train), np.array(new_X_eval), np.array(new_Y_eval), np.array(new_X_test), np.array(new_Y_test)

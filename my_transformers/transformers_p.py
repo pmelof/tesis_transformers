@@ -18,28 +18,32 @@ from sklearn.metrics import mean_squared_error
 device = torch.device('cpu')
 
 
-def splitDataset(filepath_dataset: str, feature: str, decimal: int, velocity: bool = True, scaled:bool = False):   
-    X, Y = readDataset(filepath_dataset= filepath_dataset, feature= feature, velocity= velocity)
+def splitDataset(X, Y, decimal: int, limit_sup_train: float = .8, limit_sup_eval: float = .1, scaled:bool = False):   
+    # Separar en train y test del 100% de datos
+    limit_train = int(len(X)*limit_sup_train)
+    X_train = X[:limit_train]
+    Y_train = Y[:limit_train]
+    X_test = X[limit_train:]
+    Y_test = Y[limit_train:]
+
+    # Volver a separar train en: train(90) y eval(10)
+    X_train, X_valid, Y_train, Y_valid = train_test_split(X_train, Y_train, test_size=limit_sup_eval, shuffle=False)
+
     if scaled:
         # Scaling the dataset to have mean=0 and variance=1, gives quick model convergence.
         scaler = StandardScaler()
-        X = scaler.fit_transform(X)
-        X = X.round(decimals=decimal)
+        X_train = scaler.fit_transform(X_train)
+        X_valid = scaler.transform(X_valid)
+        X_test = scaler.transform(X_test)
+        # Volver a redondear los resultados al decimal=decimal. Tal vez se pierda harta información con esto :s
+        X_train = X_train.round(decimals=decimal)
+        X_valid = X_valid.round(decimals=decimal)
+        X_test = X_test.round(decimals=decimal)    
+    
+    return X_train, Y_train, X_valid, Y_valid, X_test, Y_test
 
-    # Separar en ventanas, pero aún no, mientras solo separo en train y test del 100% de datos
-    limit_train = int(len(X)*.8)
-    X_train = X[:limit_train]
-    Y_train = Y[:limit_train]
 
-    X_train, X_valid, Y_train, Y_valid = train_test_split(X_train, Y_train, test_size=.1, shuffle=False)
-
-    ds_train = DatasetTransformers(X_train, Y_train, decimal=decimal)
-    ds_eval = DatasetTransformers(X_valid, Y_valid, decimal=decimal)
-    ds_test = DatasetTransformers(X[limit_train:], Y[limit_train:], decimal=decimal)   
-       
-    return ds_train, ds_eval, ds_test
-
-def splitDataset2(X, Y, decimal: int, vocabulary = None, limit_sup_train: float = .8, limit_sup_eval: float = .1, scaled:bool = False):   
+def splitDatasetAndTokenization(X, Y, decimal: int, vocabulary = None, limit_sup_train: float = .8, limit_sup_eval: float = .1, scaled:bool = False):   
     # Separar en train y test del 100% de datos
     limit_train = int(len(X)*limit_sup_train)
     X_train = X[:limit_train]
@@ -60,11 +64,6 @@ def splitDataset2(X, Y, decimal: int, vocabulary = None, limit_sup_train: float 
         X_train = X_train.round(decimals=decimal)
         X_valid = X_valid.round(decimals=decimal)
         X_test = X_test.round(decimals=decimal)    
-          
-        # # Volver a generar vocabulario
-        # mini = min([np.min(X_train), np.min(X_valid), np.min(X_test)])
-        # maxi = max([np.max(X_train), np.max(X_valid), np.max(X_test)])
-        # vocabulary = np.arange(mini, maxi+1, 10**(-decimal)).round(decimal)
         
         # Transformo los datos en índices del vocabulario nuevo.   
         ds_train = DatasetTransformers(X_train, Y_train, decimal=decimal, vocabulary=vocabulary)
