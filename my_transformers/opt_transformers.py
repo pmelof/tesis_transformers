@@ -58,7 +58,8 @@ def main(args):
             "optimizer": 'Adam',
             "timesteps": 2
             }
-        print(config)  
+        if printed:
+            print(config)  
         
         # setear semilla
         torch.manual_seed(0)
@@ -70,8 +71,9 @@ def main(args):
         # Creando las 5 ventanas
         windows = [.5, .6, .7, .8, .9] # % del tamaño de train (lo que quede se separá 90-10 en train y eval)
         # windows = [.8, .9]
-        for window in windows:  
-            print("FOLDS:", window)    
+        for window in windows:
+            if printed:
+                print("FOLDS:", window)    
             
             # Se trabajan con varios archivos
             if list_filenames is not None and len(list_filenames) > 1:
@@ -136,7 +138,8 @@ def main(args):
             ).to(device)
 
             # Entrenar modelo
-            print("Entrenando modelo")
+            if printed:
+                print("Entrenando modelo")
             weights_path = os.path.join(f'{dir_output}/best_weights/{monkey_name}/{feature}', f"{filename_dataset.replace('.h5', '.pt')}")
             # best_model_params_path = os.path.join(f"my_transformers/best_params/best_weights_{monkey_name}/opt", f"{filename_dataset.replace('.h5', '.pt')}")
             train_start = timer.time()
@@ -163,8 +166,9 @@ def main(args):
             # best_epoch = np.argmin(history['loss_epochs']) + 1
             
             best_epochs.append(best_epoch)
-            print(f"El entrenamiento paro en la época {stop_epoch} siendo la mejor época {best_epoch}")
-            print(f"El entrenamiento duró {train_time:.2f} minutos")
+            if printed:
+                print(f"El entrenamiento paro en la época {stop_epoch} siendo la mejor época {best_epoch}")
+                print(f"El entrenamiento duró {train_time:.2f} minutos")
             
             # Cargo los mejores pesos del modelo entrenado
             model.load_state_dict(torch.load(weights_path)) # load best model states   
@@ -172,7 +176,8 @@ def main(args):
             eval_loss, Y_pred = evaluate(model, eval_dl, config['batch_size'])
 
             # Evaluando rendimiento
-            print("Evaluando rendimiento del modelo")
+            if printed:
+                print("Evaluando rendimiento del modelo")
             Y_pred_eval = reshapeOutput(Y_pred)
             rmse_eval = mean_squared_error(eval_ds.Y, Y_pred_eval, squared=False)
             cc_eval = pearson_corrcoef(eval_ds.Y, Y_pred_eval) 
@@ -185,15 +190,16 @@ def main(args):
         rmse_eval_mean = np.asarray(rmse_eval_folds).mean()
         cc_eval_mean = np.asarray(cc_eval_folds).mean()
         eval_loss_mean = np.asarray(eval_loss_folds).mean()
-        print("="*50)
-        print("Resultados trial")
-        print("RMSE folds:", np.asarray(rmse_eval_folds))
-        print("rmse_eval_mean: ", rmse_eval_mean)
-        print("CC folds:", np.asarray(cc_eval_folds))
-        print("cc_eval_mean: ", cc_eval_mean)
-        print("EVAL loss folds:", np.asarray(eval_loss_folds))
-        print("eval_loss_mean: ", eval_loss_mean)
-        print("="*50)
+        if printed:
+            print("="*50)
+            print("Resultados trial")
+            print("RMSE folds:", np.asarray(rmse_eval_folds))
+            print("rmse_eval_mean: ", rmse_eval_mean)
+            print("CC folds:", np.asarray(cc_eval_folds))
+            print("cc_eval_mean: ", cc_eval_mean)
+            print("EVAL loss folds:", np.asarray(eval_loss_folds))
+            print("eval_loss_mean: ", eval_loss_mean)
+            print("="*50)
         
         # Quiero que por cada trial vea cual es mejor en rmse_mean, 
         # para el primer trial simplemente que lo guarde en objective.rmse_eval_mean, 
@@ -247,21 +253,26 @@ def main(args):
         only_velocity = False
     else:
         only_velocity = True
-    list_filenames = args.list_filenames
+    list_filenames = args.list_filenames.split(", ")
     if args.padding == 0:
         padding = False
     else:
-        padding = True   
+        padding = True
+    if args.printed == 0:
+        printed = False
+    else:
+        printed = True  
     n_startup_trials = args.n_startup_trials
     n_trials = args.n_trials
     timeout = args.timeout
+    
     dir_datasets = f'my_transformers/data/rounded/{monkey_name}' # Directorio donde se encuentran los archivos.'
     
     # pruebas
     # filename_dataset = 'indy_20160627_01_baks.h5' # más grande
-    filename_dataset = 'indy_20161017_02_baks_rounded_1.h5'
+    # filename_dataset = 'indy_20161017_02_baks_rounded_1.h5'
     # list_filenames = ['indy_20161017_02_baks_rounded_1.h5', 'indy_20160407_02_baks_rounded_1.h5']
-    list_filenames = ['indy_20160407_02_baks_rounded_1.h5']
+    # list_filenames = ['indy_20160407_02_baks_rounded_1.h5']
     
     # Genero vocabulario
     if scaled == False:     
@@ -311,12 +322,13 @@ def main(args):
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
     complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
 
-    print("Estadísticas del estudio: ")
-    print("  Número de trials terminados: ", len(study.trials))
-    print("  Número de trials podados: ", len(pruned_trials))
-    print("  Número de trials completos: ", len(complete_trials))
+    if printed:
+        print("Estadísticas del estudio: ")
+        print("  Número de trials terminados: ", len(study.trials))
+        print("  Número de trials podados: ", len(pruned_trials))
+        print("  Número de trials completos: ", len(complete_trials))
 
-    print("Mejores hiperparámetros:")
+        print("Mejores hiperparámetros:")
     best_hyperparams = {}       
     best_hyperparams = study.best_params                            # Return parameters of the best trial in the study.
     best_hyperparams["epochs"] = objective.epochs                   # Cantidad de épocas suficientes.
@@ -334,8 +346,9 @@ def main(args):
     best_hyperparams["time_best_trial"] = study.best_trial.duration # Tiempo mejor trial.
     best_hyperparams["history_train"] = objective.history           # Historial de train: RMSE, CC y loss por época.
 
-    for key, value in best_hyperparams.items():
-        print("    {}: {}".format(key, value))
+    if printed:
+        for key, value in best_hyperparams.items():
+            print("    {}: {}".format(key, value))
 
     params_filepath = f"{params_path}/{filename_dataset.replace('.h5', '.json')}"
     print(f"Guardando los mejores parámetros en el archivo: {params_filepath}")
@@ -355,8 +368,9 @@ if __name__ == '__main__':
     parser.add_argument('--scaled',             type=int,   default=1,      help='Normalizar o no los datos. 1=True o 0=False.')
     parser.add_argument('--filename_dataset',   type=str,                   help='Nombre del archivo a trabajar. (datos redondeadoos con extensión .h5)')
     parser.add_argument('--only_velocity',      type=int,   default=1,      help='Salida del modelo solo con velocidad o todo y_task. 1=True o 0=False')
-    parser.add_argument('--list_filenames',     type=list,  default=None,   help='Lista con archivos para agrupar.')
+    parser.add_argument('--list_filenames',     type=str,   default=None,   help='Lista con archivos para agrupar, deben estar separados por coma y un espacio. ej: "archivo1.h5, archivo2.h5"')
     parser.add_argument('--padding',            type=int,   default=1,      help='Si se desea usar padding o no al agrupar archivos. 1=True o 0=False')
+    parser.add_argument('--printed',            type=int,   default=1,      help='Si se desea imprimir por pantalla o no. 1=True o 0=False')
     # Parámetros optuna
     parser.add_argument('--n_startup_trials',   type=int,   default=1,      help='Cantidad mínima de trials.')
     parser.add_argument('--n_trials',           type=int,   default=20,     help='Máximo de trials del estudio.')
