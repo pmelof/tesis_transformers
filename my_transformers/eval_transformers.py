@@ -12,34 +12,18 @@ from sklearn.metrics import mean_squared_error
 import time as timer
 
 from torch.utils.data import DataLoader
-from transformers_p import splitDatasetAndTokenization, train, evaluate, reshapeOutput, pearson_corrcoef
+from transformers_p import splitDatasetAndTokenization, train, evaluate, reshapeOutput, pearson_corrcoef, splitDataset
 from model import TransformerModel
 import torch
-from process_input import generateBigVocabulary, readDataset, transform_data
+from process_input import generateBigVocabulary, readDataset, transform_data, appendFiles, flattenFiles, DatasetTransformers
 import matplotlib.pyplot as plt
-
-
-
-
-# Leer archivo tokenizado
-# Generar vocabulario grande, o podría traerlo como parámetro 
-# Definir variables a utilizar: filename_dataset, device, decimal, dir_datasets, vocabulary
-# (podrían ser pasados por argumentos).
-# Se lee configuración de hiperparámetros para el archivo e cuestión y se guardan en "config"
-# Separar en 5 ventanas el dataset (por el momento no, así que ventana = 1)
-# Separar en train y test por cada ventana, train lo vuelvo a separar en train y eval (90-10) con splitDataset. 
-# La parte test no se toca hasta que se evalue el modelo entrenado.
-# Secuencializar datos con timesteps.
-# Entrenar el modelo con train y eval
-# Evaluar el modelo con X_test y obtener Y_test_pred
-# Comparar Y_test_pred con Y_test.
-# Calcular RMSE y CC.
 
 
 def main(args): 
     print("="*100)
     # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     device = torch.device('cpu')
+    # Definición variables por argumento
     decimal=args.decimal   # decimal al que se desea redondear (1)
     monkey_name = args.monkey_name # indy o loco
     feature = args.feature # sua o mua
@@ -48,18 +32,36 @@ def main(args):
     else:
         scaled = True
     filename_dataset = args.filename_dataset    # datos redondeados con extensión .h5
-    # filename_dataset = 'indy_20161007_02_baks_rounded_1.h5'
-    # filename_dataset = 'indy_20161017_02_baks_rounded_1.h5'
     if args.only_velocity == 0:
         only_velocity = False
     else:
         only_velocity = True
-    dir_datasets = f'my_transformers/data/rounded/{monkey_name}' # Directorio donde se encuentran los archivos.'
     if args.use_weights == 0:
         use_weights = False
     else:
         use_weights = True
+    if args.list_filenames is not None and len(args.list_filenames) > 1:
+        list_filenames = args.list_filenames.split(", ")
+    else:
+        list_filenames = None
+    if args.padding == 0:
+        padding = False
+    else:
+        padding = True
+    if args.printed == 0:
+        printed = False
+    else:
+        printed = True
+    if args.set_configfile == 0:
+        set_configfile = False
+    else:
+        set_configfile = True
+    
     dir_datasets = f'my_transformers/data/rounded/{monkey_name}' # Directorio donde se encuentran los archivos.'
+    
+    # pruebas
+    # filename_dataset = 'indy_20161007_02_baks_rounded_1.h5'
+    # filename_dataset = 'indy_20161017_02_baks_rounded_1.h5'   
     
     # Genero vocabulario
     if scaled == False:     
@@ -80,25 +82,35 @@ def main(args):
             dir_output = f'my_transformers/eval/all_ytask/normalized'
         else:
             dir_output = f'my_transformers/eval/all_ytask/not_normalized'   
+    
+    # Renombro archivo cuando se agrupan varios
+    if list_filenames is not None and len(list_filenames) > 1:
+        new_name = "join"
+        print("Archivos por agrupar y trabajar:")
+        for name in list_filenames:
+            print(name)
+            text = name.replace(f"_baks_rounded_{decimal}.h5", "") 
+            new_name = new_name + "_" + text
+        filename_dataset = new_name + ".h5"           
+    else:
+        print("Archivo a trabajar:", filename_dataset)
+        # Lectura dataset
+        X, Y = readDataset(f"{dir_datasets}/{filename_dataset}", feature=feature, only_velocity=only_velocity)
 
     # path donde se encuentra el archivo con la configuración del modelo creada por opt
     config_filepath = os.path.join(dir_output.replace('eval', 'opt'), f'params/{monkey_name}/{feature}', filename_dataset.replace('.h5', '.json'))
     # path donde se guarden los resultados del modelo
     output_filepath = os.path.join(dir_output, f'results/{monkey_name}/{feature}', filename_dataset)
-    
-    # Lectura dataset
-    print("Archivo a evaluar:", filename_dataset)
-    X, Y = readDataset(f"{dir_datasets}/{filename_dataset}", feature=feature, only_velocity=only_velocity)
 
     run_start = timer.time()
 
-    print("Seteando configuración de hiperparámetros")
-    if config_filepath:
+    if printed:
+        print("Seteando configuración de hiperparámetros")
+    if set_configfile:
         # Abriendo archivo JSON con configuración de hiperparámetros
         print(f"Usando configuración de hiperparámetros del archivo: {config_filepath}")
         with open(f"{config_filepath}", 'r') as f:
-            config = json.load(f)
-        
+            config = json.load(f)        
     else:
         # Definiendo configuración del modelo a partir de los argumentos
         config = {           
@@ -110,8 +122,8 @@ def main(args):
             "optimizer": args.optimizer,
             "timesteps": args.timesteps,
             }        
-    config["input_dim"] = len(X[0]) # Dimensión de entrada de la base de datos. ej = 116
-    config["output_dim"] = len(Y[0]) # Dimensión de salida de la base de datos. ej = 2
+    # config["input_dim"] = len(X[0]) # Dimensión de entrada de la base de datos. ej = 116
+    # config["output_dim"] = len(Y[0]) # Dimensión de salida de la base de datos. ej = 2
     config["n_token"] = len(vocabulary)  # Tamaño del vocabulario
     config["d_hid"] = 20  # dimension of the feedforward network model in ``nn.TransformerEncoder``
     config["n_layers"] = 1 # number of ``nn.TransformerEncoderLayer`` in ``nn.TransformerEncoder``
@@ -119,7 +131,8 @@ def main(args):
     config["batch_size"] = 96
     config["optimizer"] = "Adam"
     config["timesteps"] = 2
-    print(f"Configuración de hiperparámetros: {config}")
+    if printed:
+        print(f"Configuración de hiperparámetros: {config}")
     
     # setear semilla
     torch.manual_seed(0)
@@ -131,14 +144,52 @@ def main(args):
     # Creando las 5 ventanas
     windows = [.5, .6, .7, .8, .9] # % del tamaño de train (lo que quede se separá 90-10 en train y eval)
     save_history = {}     
-    for window in windows: 
-        print("FOLDS:", window)
-        config["input_dim"] = len(X[0]) # dimensión de entrada de la base de datos. ej = 116
+    for window in windows:
+        if printed:
+            print("FOLDS:", window)
         
-        if scaled:
-            train_ds, eval_ds, test_ds = splitDatasetAndTokenization(X, Y, decimal, vocabulary=vocabulary, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
+        # Se trabajan con varios archivos
+        if list_filenames is not None and len(list_filenames) > 1:
+            Xs, Ys = appendFiles(list_filenames=list_filenames, filespath_baks=dir_datasets, feature=feature, only_velocity=only_velocity, padding=padding)
+            X_train_group = []
+            Y_train_group = []
+            X_eval_group = []
+            Y_eval_group = []
+            X_test_group = []
+            Y_test_group = []
+            i = 0
+            while i < len(Xs):
+                # Separar en train, eval y test para cada archivo
+                X_train, Y_train, X_eval, Y_eval, X_test, Y_test = splitDataset(X=Xs[i], Y=Ys[i], decimal=decimal, limit_sup_train=window, limit_sup_eval=.1, scaled=scaled)
+                X_train_group.append(X_train)
+                Y_train_group.append(Y_train)
+                X_eval_group.append(X_eval)
+                Y_eval_group.append(Y_eval)
+                X_test_group.append(X_test)
+                Y_test_group.append(Y_test)
+                i=i+1
+            X_train_group, Y_train_group, X_eval_group, Y_eval_group, X_test_group, Y_test_group = flattenFiles(X_train=X_train_group, Y_train=Y_train_group, X_eval=X_eval_group, Y_eval=Y_eval_group, X_test=X_test_group, Y_test=Y_test_group)
+            if scaled:
+                # Transformo los datos en índices del vocabulario normalizado.   
+                train_ds = DatasetTransformers(X_train_group, Y_train_group, decimal=decimal, vocabulary=vocabulary)
+                eval_ds = DatasetTransformers(X_eval_group, Y_eval_group, decimal=decimal, vocabulary=vocabulary)
+                test_ds = DatasetTransformers(X_test_group, Y_test_group, decimal=decimal, vocabulary=vocabulary)
+            else:
+                # Transformo los datos en índices del vocabulario original.     
+                train_ds = DatasetTransformers(X_train_group, Y_train_group, decimal=decimal)
+                eval_ds = DatasetTransformers(X_eval_group, Y_eval_group, decimal=decimal)
+                test_ds = DatasetTransformers(X_test_group, Y_test_group, decimal=decimal)
+            config["input_dim"] = len(X_train_group[0]) # dimensión de entrada de la base de datos. ej = 116
+            config["output_dim"] = len(Y_train_group[0]) # dimensión de salida de la base de datos. ej = 2
+        # Se trabaja con un solo archivo
         else:
-            train_ds, eval_ds, test_ds = splitDatasetAndTokenization(X, Y, decimal, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
+            config["input_dim"] = len(X[0]) # dimensión de entrada de la base de datos. ej = 116
+            config["output_dim"] = len(Y[0]) # dimensión de salida de la base de datos. ej = 2
+
+            if scaled:
+                train_ds, eval_ds, test_ds = splitDatasetAndTokenization(X, Y, decimal, vocabulary=vocabulary, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
+            else:
+                train_ds, eval_ds, test_ds = splitDatasetAndTokenization(X, Y, decimal, limit_sup_train=window, limit_sup_eval=.1 , scaled=scaled)
         
         # Secuencializando los datos
         if config['timesteps'] != 1:
@@ -168,7 +219,8 @@ def main(args):
             print(f"Se usan los pesos del modelo previamente entrenados guardados en el archivo: {best_weights_path}")
         else:
             # Entrenar modelo
-            print("Entrenando modelo")
+            if printed:
+                print("Entrenando modelo")
             best_weights_path = os.path.join(f'{dir_output}/best_weights/{monkey_name}/{feature}', f"{filename_dataset.replace('.h5', '.pt')}")
             # best_model_params_path = os.path.join(f"my_transformers/best_params/best_weights_{monkey_name}/opt", f"{filename_dataset.replace('.h5', '.pt')}")
             train_start = timer.time()
@@ -185,7 +237,8 @@ def main(args):
             train_end = timer.time()
             train_time = (train_end - train_start) / 60
 
-            print(f"El entrenamiento duró {train_time:.2f} minutos")
+            if printed:
+                print(f"El entrenamiento duró {train_time:.2f} minutos")
              
             save_history[f"history_train_fold_{window}"] = history           # Historial de train: RMSE, CC y loss por época.
             history_filepath = f"{output_filepath.replace('.h5', '.json')}"
@@ -199,7 +252,8 @@ def main(args):
         loss_test, Y_pred = evaluate(model, test_dl, config['batch_size'])
 
         # Evaluando rendimiento
-        print("Evaluando rendimiento del modelo")
+        if printed:
+            print("Evaluando rendimiento del modelo")
         Y_pred_test = reshapeOutput(Y_pred)
         rmse_test = mean_squared_error(test_ds.Y, Y_pred_test, squared=False)
         cc_test = pearson_corrcoef(test_ds.Y, Y_pred_test)
@@ -207,9 +261,10 @@ def main(args):
         rmse_test_folds.append(rmse_test)
         cc_test_folds.append(cc_test)
         loss_test_folds.append(loss_test) 
- 
-    for i in range(len(windows)):
-        print(f"Fold-{i+1} | RMSE test = {rmse_test_folds[i]:.2f}, CC test = {cc_test_folds[i]:.2f}")
+    
+    if printed:
+        for i in range(len(windows)):
+            print(f"Fold-{i+1} | RMSE test = {rmse_test_folds[i]:.2f}, CC test = {cc_test_folds[i]:.2f}")
 
     print (f"Guardando resultados en el archivo: {output_filepath}")
     with h5py.File(output_filepath, 'w') as f:
@@ -226,7 +281,8 @@ def main(args):
      
     run_end = timer.time()
     run_time = (run_end - run_start) / 60
-    print (f"Whole processes took {run_time:.2f} minutes")
+    if printed:
+        print (f"La evaluación demoró {run_time:.2f} minutos")
 
 
 
@@ -264,6 +320,10 @@ if __name__ == '__main__':
     parser.add_argument('--filename_dataset',   type=str,                   help='Nombre del archivo a trabajar. (datos redondeadoos con extensión .h5).')
     parser.add_argument('--only_velocity',      type=int,   default=1,      help='Salida del modelo solo con velocidad o todo y_task. 1=True o 0=False')
     parser.add_argument('--use_weights',        type=int,   default=0,      help='¿Se desea ejecutar train otra vez? o mejor usar los pesos guardados. 1=True o 0=False')
+    parser.add_argument('--list_filenames',     type=str,   default=None,   help='Lista con archivos para agrupar, deben estar separados por coma y un espacio. ej: "archivo1.h5, archivo2.h5"')
+    parser.add_argument('--padding',            type=int,   default=1,      help='Si se desea usar padding o no al agrupar archivos. 1=True o 0=False')
+    parser.add_argument('--printed',            type=int,   default=1,      help='Si se desea imprimir por pantalla o no. 1=True o 0=False')
+    parser.add_argument('--set_configfile',     type=int,   default=1,      help='Si se setea la configuración de hiperparámetros desde un archivo. 1=True o 0=False')
     # parser.add_argument('--filename_config',    type=str,                   help='Nombre del archivo con las configuraciones del modelo.')
     # para el modelo de Transformers
     parser.add_argument('--d_model',            type=int,   default=20,     help='Dimensión del embedding')

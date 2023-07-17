@@ -70,7 +70,6 @@ def main(args):
         best_epochs = []
         # Creando las 5 ventanas
         windows = [.5, .6, .7, .8, .9] # % del tamaño de train (lo que quede se separá 90-10 en train y eval)
-        # windows = [.8, .9]
         for window in windows:
             if printed:
                 print("FOLDS:", window)    
@@ -253,7 +252,10 @@ def main(args):
         only_velocity = False
     else:
         only_velocity = True
-    list_filenames = args.list_filenames.split(", ")
+    if args.list_filenames is not None and len(args.list_filenames) > 1:
+        list_filenames = args.list_filenames.split(", ")
+    else:
+        list_filenames = None
     if args.padding == 0:
         padding = False
     else:
