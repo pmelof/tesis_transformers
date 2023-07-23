@@ -281,7 +281,7 @@ def main(args):
         vocabulary, _, _ = generateBigVocabulary(dir_datasets=dir_datasets, decimal=decimal)
     # Otra opción cuando se normaliza: crear vocabulario con números negativos y positivos, rango amplio para que funcione para todos los archivos.
     else:
-        # el valor mínimo encontrado fue 4.2 y el valor máximo de 132.7.
+        # el valor mínimo encontrado fue -4.2 y el valor máximo de 132.7.
         vocabulary = np.arange(-10, 150, 10**(-decimal)).round(decimal)
     
     # Directorio archivos de salida (hiperparámetros)

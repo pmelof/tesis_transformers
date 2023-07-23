@@ -16,7 +16,7 @@ from transformers_p import splitDatasetAndTokenization, train, evaluate, reshape
 from model import TransformerModel
 import torch
 from process_input import generateBigVocabulary, readDataset, transform_data, appendFiles, flattenFiles, DatasetTransformers
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 
 def main(args): 
@@ -286,26 +286,26 @@ def main(args):
 
 
 
-    # Graficando resultado
-    plt.subplot(2, 1, 1)
-    plt.plot(np.transpose(Y_pred_test)[0][:200], '--', color = 'tab:red', label = 'Transformers')
-    plt.plot(np.transpose(test_ds.Y)[0][:200], color = 'tab:blue', label = 'True')
-    plt.ylabel('x-velocidad')
-    plt.xlabel('Tiempo [s]')
-    plt.title('Velocidad real vs velocidad Transformers', fontdict = {'fontsize':14, 'fontweight':'bold'})
-    #plt.legend(bbox_to_anchor=(1.25, -0.1), loc = 'lower right')
-    plt.subplot(2, 1, 2)
-    plt.plot(np.transpose(Y_pred_test)[1][:200], '--', color = 'tab:red', label = 'Transformers')
-    plt.plot(np.transpose(test_ds.Y)[1][:200], color = 'tab:blue', label = 'True')
-    plt.ylabel('y-velocidad')
-    plt.xlabel('Tiempo [s]')
-    #plt.title('Velocidad real vs velocidad QRNN', fontdict = {'fontsize':14, 'fontweight':'bold'})
-    # plt.legend(bbox_to_anchor=(1.75, -0.01), loc = 'lower right')
-    # set the spacing between subplots
-    # plt.subplots_adjust(left=0.1, right=0.9, top=0.9, wspace=0.4, hspace=0.4)
-    plt.show
-    plt.savefig(f"{output_filepath.replace('.h5', '.png')}")
-    print(f"Imagen guardada en {output_filepath.replace('.h5', '.png')}")
+    # # Graficando resultado
+    # plt.subplot(2, 1, 1)
+    # plt.plot(np.transpose(Y_pred_test)[0][:200], '--', color = 'tab:red', label = 'Transformers')
+    # plt.plot(np.transpose(test_ds.Y)[0][:200], color = 'tab:blue', label = 'True')
+    # plt.ylabel('x-velocidad')
+    # plt.xlabel('Tiempo [s]')
+    # plt.title('Velocidad real vs velocidad Transformers', fontdict = {'fontsize':14, 'fontweight':'bold'})
+    # #plt.legend(bbox_to_anchor=(1.25, -0.1), loc = 'lower right')
+    # plt.subplot(2, 1, 2)
+    # plt.plot(np.transpose(Y_pred_test)[1][:200], '--', color = 'tab:red', label = 'Transformers')
+    # plt.plot(np.transpose(test_ds.Y)[1][:200], color = 'tab:blue', label = 'True')
+    # plt.ylabel('y-velocidad')
+    # plt.xlabel('Tiempo [s]')
+    # #plt.title('Velocidad real vs velocidad QRNN', fontdict = {'fontsize':14, 'fontweight':'bold'})
+    # # plt.legend(bbox_to_anchor=(1.75, -0.01), loc = 'lower right')
+    # # set the spacing between subplots
+    # # plt.subplots_adjust(left=0.1, right=0.9, top=0.9, wspace=0.4, hspace=0.4)
+    # plt.show
+    # plt.savefig(f"{output_filepath.replace('.h5', '.png')}")
+    # print(f"Imagen guardada en {output_filepath.replace('.h5', '.png')}")
 
 
 
