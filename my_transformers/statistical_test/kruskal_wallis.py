@@ -82,8 +82,14 @@ def listResultsMetrics(dir_results:str, list_names:list):
 
 
 def main():
+    #########################################################################################################
+    ######          LOCO SUA Y MUA (SIN NORMALIZAR VS NORMALIZADOS) PARA ARCHIVOS SIN AGRUPAR          ######
+    #########################################################################################################
+    
     # Genero lista con nombres de los archivos SIN agrupar, estos nombres son iguales para SUA, MUA y los datos normalizados o sin normalizar.
     list_names = listFilenamesResults(dir_results="my_transformers/eval/only_velocity/not_normalized/results/loco/sua", join=False)
+    print("Lista de archivos sin agrupar para comparar usando el test kruskal-wallis:", list_names)
+    
     # Genero lista con todos los RMSE de todos los archivos sin agrupar y hago lo mismo para CC.
     # 1) Loco SUA, sin normalizar
     list_rmse_sua_not_normalized, list_cc_sua_not_normalized = listResultsMetrics(dir_results="my_transformers/eval/only_velocity/not_normalized/results/loco/sua", list_names=list_names)
@@ -95,71 +101,53 @@ def main():
     list_rmse_mua_normalized, list_cc_mua_normalized = listResultsMetrics(dir_results="my_transformers/eval/only_velocity/normalized/results/loco/mua", list_names=list_names)
 
     # Calculo el test Kruskal Wallis para RMSE SUA sin agrupar. Sin normalizar vs normalizar
-    kruskal_rmse_sua_not_normalized = stats.kruskal (list_rmse_sua_not_normalized, list_rmse_sua_normalized)  
-    print("kruskal_rmse_sua_not_normalized: ", kruskal_rmse_sua_not_normalized)
+    kruskal_rmse_sua = stats.kruskal (list_rmse_sua_not_normalized, list_rmse_sua_normalized)  
+    print("kruskal_rmse_sua: ", kruskal_rmse_sua)
     # Calculo el test Kruskal Wallis para CC SUA sin agrupar. Sin normalizar vs normalizar
-    kruskal_cc_sua_not_normalized = stats.kruskal (list_cc_sua_not_normalized, list_cc_sua_normalized)  
-    print("kruskal_cc_sua_not_normalized: ", kruskal_cc_sua_not_normalized)
+    kruskal_cc_sua = stats.kruskal (list_cc_sua_not_normalized, list_cc_sua_normalized)  
+    print("kruskal_cc_sua: ", kruskal_cc_sua)
     
     # Calculo el test Kruskal Wallis para RMSE MUA sin agrupar. Sin normalizar vs normalizar
-    kruskal_rmse_mua_not_normalized = stats.kruskal (list_rmse_mua_not_normalized, list_rmse_mua_normalized)  
-    print("kruskal_rmse_mua_not_normalized: ", kruskal_rmse_mua_not_normalized)
+    kruskal_rmse_mua = stats.kruskal (list_rmse_mua_not_normalized, list_rmse_mua_normalized)  
+    print("kruskal_rmse_mua: ", kruskal_rmse_mua)
     # Calculo el test Kruskal Wallis para CC MUA sin agrupar. Sin normalizar vs normalizar
-    kruskal_cc_mua_not_normalized = stats.kruskal (list_cc_mua_not_normalized, list_cc_mua_normalized)  
-    print("kruskal_cc_mua_not_normalized: ", kruskal_cc_mua_not_normalized)
+    kruskal_cc_mua = stats.kruskal (list_cc_mua_not_normalized, list_cc_mua_normalized)  
+    print("kruskal_cc_mua: ", kruskal_cc_mua)
     
+    print("=="*100)
+    #######################################################################################################
+    ######          LOCO SUA Y MUA (SIN NORMALIZAR VS NORMALIZADOS) PARA ARCHIVOS AGRUPADOS          ######
+    #######################################################################################################
     
+    # Genero lista con nombres de los archivos agrupados, estos nombres son iguales para SUA, MUA y los datos normalizados o sin normalizar.
+    list_names_join = listFilenamesResults(dir_results="my_transformers/eval/only_velocity/not_normalized/results/loco/sua", join=True)
+    print("Lista de archivos agrupados para comparar usando el test kruskal-wallis:", list_names_join)
+    
+    # Genero lista con todos los RMSE de todos los archivos agrupados y hago lo mismo para CC.
+    # 1) Loco SUA, sin normalizar
+    list_join_rmse_sua_not_normalized, list_join_cc_sua_not_normalized = listResultsMetrics(dir_results="my_transformers/eval/only_velocity/not_normalized/results/loco/sua", list_names=list_names_join)
+    # 2) Loco MUA, sin normalizar
+    list_join_rmse_mua_not_normalized, list_join_cc_mua_not_normalized = listResultsMetrics(dir_results="my_transformers/eval/only_velocity/not_normalized/results/loco/mua", list_names=list_names_join)
+    # 3) Loco SUA, normalizado
+    list_join_rmse_sua_normalized, list_join_cc_sua_normalized = listResultsMetrics(dir_results="my_transformers/eval/only_velocity/normalized/results/loco/sua", list_names=list_names_join)
+    # 4) Loco MUA, normalizado
+    list_join_rmse_mua_normalized, list_join_cc_mua_normalized = listResultsMetrics(dir_results="my_transformers/eval/only_velocity/normalized/results/loco/mua", list_names=list_names_join)
+
+    # Calculo el test Kruskal Wallis para RMSE SUA sin agrupar. Sin normalizar vs normalizar
+    kruskal_join_rmse_sua = stats.kruskal (list_join_rmse_sua_not_normalized, list_join_rmse_sua_normalized)  
+    print("kruskal_join_rmse_sua: ", kruskal_join_rmse_sua)
+    # Calculo el test Kruskal Wallis para CC SUA sin agrupar. Sin normalizar vs normalizar
+    kruskal_join_cc_sua = stats.kruskal (list_join_cc_sua_not_normalized, list_join_cc_sua_normalized)  
+    print("kruskal_join_cc_sua: ", kruskal_join_cc_sua)
+    
+    # Calculo el test Kruskal Wallis para RMSE MUA sin agrupar. Sin normalizar vs normalizar
+    kruskal_join_rmse_mua = stats.kruskal (list_join_rmse_mua_not_normalized, list_join_rmse_mua_normalized)  
+    print("kruskal_join_rmse_mua: ", kruskal_join_rmse_mua)
+    # Calculo el test Kruskal Wallis para CC MUA sin agrupar. Sin normalizar vs normalizar
+    kruskal_join_cc_mua = stats.kruskal (list_join_cc_mua_not_normalized, list_join_cc_mua_normalized)  
+    print("kruskal_join_cc_mua: ", kruskal_join_cc_mua)
     
     return
 
 main()
-
-
-
-# list_names_join = listFilenamesResults(dir_results="my_transformers/eval/only_velocity/not_normalized/results/loco/sua", join=True)
-# print(list_names)
-# print("---"*10)
-# print(list_names_join)
-# print("---"*10)
-# # 1) Loco SUA sin normalizar, total 10 archivos con 5 ventanas cada uno.
-
-
-# # 1) Loco SUA normalizado, total 10 archivos con 5 ventanas cada uno.
-# rmse_files_n = []
-# rmse_file1, cc_file1 = readResults("my_transformers/eval/only_velocity/normalized/results/loco/sua", "loco_20170302_02_baks_rounded_1.h5")
-# rmse_file2, cc_file2 = readResults("my_transformers/eval/only_velocity/normalized/results/loco/sua", "loco_20170301_05_baks_rounded_1.h5")
-
-# rmse_files_n.append(rmse_file1.tolist())
-# rmse_files_n.append(rmse_file2.tolist())
-# print("Lista RMSE normalizados", rmse_files_n)
-
-
-# rmse_files_sn = []
-# rmse_file1_sn, cc_file1_sn = readResults("my_transformers/eval/only_velocity/not_normalized/results/loco/sua", "loco_20170302_02_baks_rounded_1.h5")
-# rmse_file2_sn, cc_file2_sn = readResults("my_transformers/eval/only_velocity/not_normalized/results/loco/sua", "loco_20170301_05_baks_rounded_1.h5")
-
-# rmse_files_sn.append(rmse_file1_sn.tolist())
-# rmse_files_sn.append(rmse_file2_sn.tolist())
-# print("Lista RMSE sin normalizar", rmse_files_sn)
-
-# a = stats.kruskal (rmse_files_n, rmse_files_sn)
-# print(a)
-
-
-#########################################################################
-
-
-# print(type(file1.tolist()))
-# print(file1.tolist())
-
-
-
-# grupo1 = [7, 14, 14, 13, 12, 9, 6, 14, 12, 8]
-# grupo2 = [15, 17, 13, 15, 15, 13, 9, 12, 10, 8]
-# grupo3 = [6, 8, 8, 9, 5, 14, 13, 8, 10, 9]
-
-# # realizar la prueba de Kruskal-Wallis 
-# a = stats.kruskal (grupo1, grupo2, grupo3)
-
-# print(a)
 
