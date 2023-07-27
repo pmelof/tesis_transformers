@@ -95,7 +95,7 @@ def main():
     # j) QRNN vs. Transformers (agrupados y normalizados)
     
     # all_options = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
-    real_option = ["a", "c", "b"]
+    real_option = ["c"]
     
     
     # SOLO LOCO
@@ -133,6 +133,16 @@ def main():
     list_join_rmse_sua_normalized, list_join_cc_sua_normalized = listResultsMetrics(dir_results="my_transformers/eval/only_velocity/normalized/results/loco/sua", list_names=list_names_join)
     # 4) Loco MUA, normalizado
     list_join_rmse_mua_normalized, list_join_cc_mua_normalized = listResultsMetrics(dir_results="my_transformers/eval/only_velocity/normalized/results/loco/mua", list_names=list_names_join)
+    
+    
+    # QRNN
+    # Obtengo RMSE y CC Loco:
+    # 1) Loco SUA
+    list_qrnn_rmse_sua, list_qrnn_cc_sua = listResultsMetrics(dir_results="results_qrnn/loco/sua", list_names=list_names_qrnn_sua)
+    # 2) Loco MUA, normalizado
+    list_qrnn_rmse_mua, list_qrnn_cc_mua = listResultsMetrics(dir_results="results_qrnn/loco/mua", list_names=list_names_qrnn_mua)
+
+    
     
     if "a" in real_option:    
         print("\n", "=="*100)
@@ -191,7 +201,6 @@ def main():
     if "d" in real_option:    
         print("\n", "=="*100)
         print("Opción d \nLOCO SUA Y MUA (AGRUPADOS VS NO AGRUPADOS) NORMALIZADOS \n")
-        # EN PROCESO... .
  
        # Calculo el test Kruskal Wallis para RMSE SUA. Agrupados vs. sin agrupar. Normalizado.
         kruskal_join_vs_not_join_rmse_sua_normalized = stats.kruskal (list_join_rmse_sua_normalized, list_rmse_sua_normalized)  
@@ -206,6 +215,91 @@ def main():
         # Calculo el test Kruskal Wallis para CC MUA. Agrupados vs. sin agrupar. Normalizado.
         kruskal_join_vs_not_join_cc_mua_normalized = stats.kruskal (list_join_cc_mua_normalized, list_cc_mua_normalized)  
         print("kruskal_join_vs_not_join_cc_mua_normalized: \n", kruskal_join_vs_not_join_cc_mua_normalized)
+    
+    # e) 1 Agrupado vs. 1 no agrupado (sin normalizar) - test U de Mann-Whitney
+    if "e" in real_option:    
+        print("\n", "=="*100)
+        print("Opción e \nLOCO SUA Y MUA (GRUPO 3.5 VS loco_20170227_04) SIN NORMALIZAR \n")
+        print("En proceso ... no se si hacerlo la verdad).")
+        
+    # f) 1 Agrupado vs. 1 no agrupado (normalizado) - test U de Mann-Whitney   
+    if "f" in real_option:    
+        print("\n", "=="*100)
+        print("Opción f \nLOCO SUA Y MUA (GRUPO 3.5 VS loco_20170227_04) NORMALIZADOS \n")
+        print("En proceso ... no se si hacerlo la verdad).")
+    
+    if "g" in real_option:    
+        print("\n", "=="*100)
+        print("Opción g \nLOCO SUA Y MUA (QRNN VS TRANSFORMERS SIN NORMALIZAR) \n")
+ 
+        # Calculo el test Kruskal Wallis para RMSE SUA. QRNN vs TRANSFORMERS sin normalizar.
+        kruskal_qrnn_vs_trans_rmse_sua_not_normalized = stats.kruskal (list_qrnn_rmse_sua, list_rmse_sua_not_normalized)  
+        print("\nkruskal_qrnn_vs_trans_rmse_sua_not_normalized: \n", kruskal_qrnn_vs_trans_rmse_sua_not_normalized)
+        # Calculo el test Kruskal Wallis para CC SUA. QRNN vs TRANSFORMERS sin normalizar.
+        kruskal_qrnn_vs_trans_cc_sua_not_normalized = stats.kruskal (list_qrnn_cc_sua, list_cc_sua_not_normalized)  
+        print("kruskal_qrnn_vs_trans_cc_sua_not_normalized: \n", kruskal_qrnn_vs_trans_cc_sua_not_normalized)
+        
+        # Calculo el test Kruskal Wallis para RMSE MUA. QRNN vs TRANSFORMERS sin normalizar.
+        kruskal_qrnn_vs_trans_rmse_mua_not_normalized = stats.kruskal (list_qrnn_rmse_mua, list_rmse_mua_not_normalized)  
+        print("\nkruskal_qrnn_vs_trans_rmse_mua_not_normalized: \n", kruskal_qrnn_vs_trans_rmse_mua_not_normalized)
+        # Calculo el test Kruskal Wallis para CC MUA. QRNN vs TRANSFORMERS sin normalizar.
+        kruskal_qrnn_vs_trans_cc_mua_not_normalized = stats.kruskal (list_qrnn_cc_mua, list_cc_mua_not_normalized)  
+        print("kruskal_qrnn_vs_trans_cc_mua_not_normalized: \n", kruskal_qrnn_vs_trans_cc_mua_not_normalized)
+    
+    if "h" in real_option:    
+        print("\n", "=="*100)
+        print("Opción h \nLOCO SUA Y MUA (QRNN VS TRANSFORMERS NORMALIZADOS) \n")
+ 
+       # Calculo el test Kruskal Wallis para RMSE SUA. QRNN vs TRANSFORMERS NORMALIZADOS
+        kruskal_qrnn_vs_trans_rmse_sua_normalized = stats.kruskal (list_qrnn_rmse_sua, list_rmse_sua_normalized)  
+        print("\nkruskal_qrnn_vs_trans_rmse_sua_normalized: \n", kruskal_qrnn_vs_trans_rmse_sua_normalized)
+        # Calculo el test Kruskal Wallis para CC SUA. QRNN vs TRANSFORMERS NORMALIZADOS
+        kruskal_qrnn_vs_trans_cc_sua_normalized = stats.kruskal (list_qrnn_cc_sua, list_cc_sua_normalized)  
+        print("kruskal_qrnn_vs_trans_cc_sua_normalized: \n", kruskal_qrnn_vs_trans_cc_sua_normalized)
+        
+        # Calculo el test Kruskal Wallis para RMSE MUA. QRNN vs TRANSFORMERS NORMALIZADOS
+        kruskal_qrnn_vs_trans_rmse_mua_normalized = stats.kruskal (list_qrnn_rmse_mua, list_rmse_mua_normalized)  
+        print("\nkruskal_qrnn_vs_trans_rmse_mua_normalized: \n", kruskal_qrnn_vs_trans_rmse_mua_normalized)
+        # Calculo el test Kruskal Wallis para CC MUA. QRNN vs TRANSFORMERS NORMALIZADOS
+        kruskal_qrnn_vs_trans_cc_mua_normalized = stats.kruskal (list_qrnn_cc_mua, list_cc_mua_normalized)  
+        print("kruskal_qrnn_vs_trans_cc_mua_normalized: \n", kruskal_qrnn_vs_trans_cc_mua_normalized)
+    
+    if "i" in real_option:    
+        print("\n", "=="*100)
+        print("Opción i \nLOCO SUA Y MUA (QRNN VS TRANSFORMERS AGRUPADOS Y SIN NORMALIZAR) \n")
+ 
+       # Calculo el test Kruskal Wallis para RMSE SUA. QRNN vs TRANSFORMERS agrupados y sin normalizar.
+        kruskal_qrnn_vs_trans_join_rmse_sua_not_normalized = stats.kruskal (list_qrnn_rmse_sua, list_join_rmse_sua_not_normalized)  
+        print("\nkruskal_qrnn_vs_trans_join_rmse_sua_not_normalized: \n", kruskal_qrnn_vs_trans_join_rmse_sua_not_normalized)
+        # Calculo el test Kruskal Wallis para CC SUA. QRNN vs TRANSFORMERS agrupados y sin normalizar.
+        kruskal_qrnn_vs_trans_join_cc_sua_not_normalized = stats.kruskal (list_qrnn_cc_sua, list_join_cc_sua_not_normalized)  
+        print("kruskal_qrnn_vs_trans_join_cc_sua_not_normalized: \n", kruskal_qrnn_vs_trans_join_cc_sua_not_normalized)
+        
+        # Calculo el test Kruskal Wallis para RMSE MUA. QRNN vs TRANSFORMERS agrupados y sin normalizar.
+        kruskal_qrnn_vs_trans_join_rmse_mua_not_normalized = stats.kruskal (list_qrnn_rmse_mua, list_join_rmse_mua_not_normalized)  
+        print("\nkruskal_qrnn_vs_trans_join_rmse_mua_not_normalized: \n", kruskal_qrnn_vs_trans_join_rmse_mua_not_normalized)
+        # Calculo el test Kruskal Wallis para CC MUA. QRNN vs TRANSFORMERS agrupados y sin normalizar.
+        kruskal_qrnn_vs_trans_join_cc_mua_not_normalized = stats.kruskal (list_qrnn_cc_mua, list_join_cc_mua_not_normalized)  
+        print("kruskal_qrnn_vs_trans_join_cc_mua_not_normalized: \n", kruskal_qrnn_vs_trans_join_cc_mua_not_normalized)
+    
+    # j) QRNN vs. Transformers (agrupados y normalizados)
+    if "j" in real_option:    
+        print("\n", "=="*100)
+        print("Opción j \nLOCO SUA Y MUA (QRNN VS TRANSFORMERS AGRUPADOS Y NORMALIZADO) \n")
+ 
+       # Calculo el test Kruskal Wallis para RMSE SUA. QRNN vs TRANSFORMERS agrupados y normalizados.
+        kruskal_qrnn_vs_trans_join_rmse_sua_normalized = stats.kruskal (list_qrnn_rmse_sua, list_join_rmse_sua_normalized)  
+        print("\nkruskal_qrnn_vs_trans_join_rmse_sua_normalized: \n", kruskal_qrnn_vs_trans_join_rmse_sua_normalized)
+        # Calculo el test Kruskal Wallis para CC SUA. QRNN vs TRANSFORMERS agrupados y normalizados.
+        kruskal_qrnn_vs_trans_join_cc_sua_normalized = stats.kruskal (list_qrnn_cc_sua, list_join_cc_sua_normalized)  
+        print("kruskal_qrnn_vs_trans_join_cc_sua_normalized: \n", kruskal_qrnn_vs_trans_join_cc_sua_normalized)
+        
+        # Calculo el test Kruskal Wallis para RMSE MUA. QRNN vs TRANSFORMERS agrupados y normalizados.
+        kruskal_qrnn_vs_trans_join_rmse_mua_normalized = stats.kruskal (list_qrnn_rmse_mua, list_join_rmse_mua_normalized)  
+        print("\nkruskal_qrnn_vs_trans_join_rmse_mua_normalized: \n", kruskal_qrnn_vs_trans_join_rmse_mua_normalized)
+        # Calculo el test Kruskal Wallis para CC MUA. QRNN vs TRANSFORMERS agrupados y normalizados.
+        kruskal_qrnn_vs_trans_join_cc_mua_normalized = stats.kruskal (list_qrnn_cc_mua, list_join_cc_mua_normalized)  
+        print("kruskal_qrnn_vs_trans_join_cc_mua_normalized: \n", kruskal_qrnn_vs_trans_join_cc_mua_normalized)
     
     
     return
